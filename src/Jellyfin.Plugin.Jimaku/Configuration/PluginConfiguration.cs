@@ -40,6 +40,20 @@ public class PluginConfiguration : BasePluginConfiguration
     public double MinCorrelation { get; set; } = 0.50;
 
     /// <summary>
+    /// Gets or sets the minimum correlation required when the comparison was made on cue starts
+    /// rather than on how long cues stay on screen.
+    /// </summary>
+    /// <remarks>
+    /// Onset signals are sparse - a short pulse per cue rather than a filled interval - so the same
+    /// pair of subtitles scores far lower this way even when perfectly aligned. Measured on real
+    /// files, correctly timed subtitles land around 0.44 to 0.56, while an unrelated episode scores
+    /// about 0.04. Uniqueness does the heavy lifting on this path, cleanly separating roughly 5.0
+    /// for a real match from 1.0 for a false one, so the correlation floor only has to exclude
+    /// noise.
+    /// </remarks>
+    public double MinOnsetCorrelation { get; set; } = 0.25;
+
+    /// <summary>
     /// Gets or sets the minimum peak-to-second-peak ratio required to accept an alignment.
     /// </summary>
     /// <remarks>

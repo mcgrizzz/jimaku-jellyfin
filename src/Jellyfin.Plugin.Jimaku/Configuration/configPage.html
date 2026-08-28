@@ -79,6 +79,16 @@
           </div>
 
           <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinOnsetCorrelation" step="0.05" min="0" max="1"
+                   label="Minimum correlation when matching on cue starts (0-1)" />
+            <div class="fieldDescription">
+              Cue-start signals are sparse, so the same pair scores lower this way than when whole
+              cues are compared. Correctly timed subtitles measure around 0.44-0.56 here; an
+              unrelated episode scores about 0.04.
+            </div>
+          </div>
+
+          <div class="inputContainer">
             <input is="emby-input" type="number" id="MinPeakRatio" step="0.05" min="1"
                    label="Minimum uniqueness" />
             <div class="fieldDescription">

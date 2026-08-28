@@ -58,6 +58,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         // poorly despite being correct - a Blu-ray release measured against a streaming track, say.
         // Onsets ignore how lines are divided and compare only when each one begins.
         var representation = "cue overlap";
+        var matchedOnOnsets = false;
         if (reference.Cues is { Count: > 0 } referenceCues)
         {
             var onsetFits = search.Search(
@@ -69,6 +70,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             {
                 fits = onsetFits;
                 representation = "cue starts";
+                matchedOnOnsets = true;
             }
         }
 
@@ -86,19 +88,38 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             ReferenceSource = $"{reference.Source}, matched on {representation}",
         };
 
-        var globalIsGood = best.Correlation >= configuration.MinCorrelation
+        // How aligned it is and how much of the dialogue it covers are separate questions, and a
+        // subtitle that omits lines can align perfectly. Measure both.
+        if (reference.Cues is { Count: > 0 } coverageReference)
+        {
+            var coverage = CueCoverage.Measure(
+                coverageReference,
+                probe,
+                best.Transform,
+                reference.Signal.DurationSeconds);
+
+            result.Coverage = coverage.ReferenceCovered;
+            result.OnScreenRatio = coverage.OnScreenRatio;
+        }
+
+        // The two representations are not on the same scale, so they cannot share a threshold.
+        var minCorrelation = matchedOnOnsets
+            ? configuration.MinOnsetCorrelation
+            : configuration.MinCorrelation;
+
+        var globalIsGood = best.Correlation >= minCorrelation
                            && best.PeakRatio >= configuration.MinPeakRatio;
 
         // A differing cut shows up as a global fit that is weak but not absent: parts of the
         // subtitle line up, so try the piecewise aligner before giving up on the file.
         var shouldTrySplit = allowPiecewise
                              && (!globalIsGood || expectDifferentCut)
-                             && best.Correlation > configuration.MinCorrelation / 2;
+                             && best.Correlation > minCorrelation / 2;
 
         if (shouldTrySplit)
         {
             var split = new SplitAligner().Align(reference.Signal, probe, best.OffsetSeconds);
-            if (IsCredibleSplit(split, best.Correlation))
+            if (IsCredibleSplit(split, best.Correlation, minCorrelation))
             {
                 result.Verdict = SyncVerdict.PiecewiseCut;
                 result.Blocks = split.Blocks;
@@ -113,7 +134,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         if (!globalIsGood)
         {
             result.Verdict = SyncVerdict.Declined;
-            result.Reason = DescribeWeakMatch(best);
+            result.Reason = DescribeWeakMatch(best, minCorrelation);
             return result;
         }
 
@@ -201,7 +222,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         Reason = "The subtitle filename carries the same CRC32 as the video, so it was released against this exact file.",
     };
 
-    private bool IsCredibleSplit(SplitResult split, double globalCorrelation)
+    private bool IsCredibleSplit(SplitResult split, double globalCorrelation, double minCorrelation)
     {
         if (split.Blocks.Count is 0 or 1)
         {
@@ -220,7 +241,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             return false;
         }
 
-        if (split.Correlation < configuration.MinCorrelation)
+        if (split.Correlation < minCorrelation)
         {
             return false;
         }
@@ -230,20 +251,20 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         return split.Correlation > globalCorrelation + 0.05;
     }
 
-    private string DescribeWeakMatch(LinearFit best)
+    private string DescribeWeakMatch(LinearFit best, double minCorrelation)
     {
-        if (best.Correlation < configuration.MinCorrelation && best.PeakRatio < configuration.MinPeakRatio)
+        if (best.Correlation < minCorrelation && best.PeakRatio < configuration.MinPeakRatio)
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"No convincing alignment: correlation {best.Correlation:0.00} (need {configuration.MinCorrelation:0.00}) and the best offset was no better than the alternatives (uniqueness {best.PeakRatio:0.00}, need {configuration.MinPeakRatio:0.00}). This is most likely a subtitle for a different episode.");
+                $"No convincing alignment: correlation {best.Correlation:0.00} (need {minCorrelation:0.00}) and the best offset was no better than the alternatives (uniqueness {best.PeakRatio:0.00}, need {configuration.MinPeakRatio:0.00}). This is most likely a subtitle for a different episode.");
         }
 
-        if (best.Correlation < configuration.MinCorrelation)
+        if (best.Correlation < minCorrelation)
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"Timings only correlate at {best.Correlation:0.00}, below the {configuration.MinCorrelation:0.00} required to correct safely.");
+                $"Timings only correlate at {best.Correlation:0.00}, below the {minCorrelation:0.00} required to correct safely.");
         }
 
         return string.Create(

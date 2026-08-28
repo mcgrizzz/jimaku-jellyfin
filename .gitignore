@@ -10,3 +10,6 @@ artifacts/
 *.nupkg
 tests/local.runsettings
 TestResults/
+
+# Local diagnostic media, never committed.
+samples/

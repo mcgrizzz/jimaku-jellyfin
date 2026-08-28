@@ -63,6 +63,12 @@ public class CandidateDto
 
     /// <summary>Gets or sets an offset attributed to the reference track and discounted.</summary>
     public double? ReferenceBiasSeconds { get; set; }
+
+    /// <summary>Gets or sets the fraction of reference cues this subtitle also marks.</summary>
+    public double? Coverage { get; set; }
+
+    /// <summary>Gets or sets the share of runtime this subtitle has something on screen.</summary>
+    public double? OnScreenRatio { get; set; }
 }
 
 /// <summary>The result of a sync attempt.</summary>

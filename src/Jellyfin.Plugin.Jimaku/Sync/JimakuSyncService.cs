@@ -577,13 +577,20 @@ public sealed class JimakuSyncService(
             return double.NegativeInfinity;
         }
 
-        var correlation = Math.Round(alignment.Correlation, 2);
-        var uniqueness = Math.Min(alignment.PeakRatio, 5.0) / 100.0;
+        // Coverage leads. Between two correctly aligned subtitles the better one is the one that
+        // actually renders the dialogue: a file omitting a fifth of the lines, and holding the rest
+        // on screen briefly, reads badly however well it correlates. Correlation is normalized, so
+        // on its own it quietly favours the sparser file, whose fewer cues have less to disagree
+        // with. Correlation and uniqueness stay in the score to break ties and to keep a
+        // well-covered but mistimed file from winning.
+        var coverage = Math.Round(alignment.Coverage, 2);
+        var correlation = Math.Round(alignment.Correlation, 2) / 10.0;
+        var uniqueness = Math.Min(alignment.PeakRatio, 5.0) / 1000.0;
 
         // A file needing no correction is preferable to one needing a large one, all else equal.
-        var penalty = Math.Min(Math.Abs(alignment.Transform.OffsetSeconds), 30) / 10000.0;
+        var penalty = Math.Min(Math.Abs(alignment.Transform.OffsetSeconds), 30) / 100000.0;
 
-        return correlation + uniqueness - penalty;
+        return coverage + correlation + uniqueness - penalty;
     }
 
     /// <summary>Ranks candidates by how likely the file is to be usefully Japanese.</summary>

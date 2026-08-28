@@ -221,6 +221,8 @@ public class JimakuController(
         Correction = candidate.Alignment?.Transform.Describe(),
         TimingNotes = candidate.Alignment?.Reason,
         ReferenceBiasSeconds = candidate.Alignment?.ReferenceBiasSeconds,
+        Coverage = candidate.Alignment?.Coverage,
+        OnScreenRatio = candidate.Alignment?.OnScreenRatio,
     };
 
     private static SyncResultDto ToDto(SyncResult result) => new()

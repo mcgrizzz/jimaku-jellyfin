@@ -29,6 +29,12 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 {
     private const int MinimumCues = 10;
 
+    /// <summary>Cap on tracks compared, to bound the pairwise comparison on many-subtitle releases.</summary>
+    private const int MaxTracksToCompare = 10;
+
+    /// <summary>How far apart two tracks may sit and still be counted as agreeing.</summary>
+    private const double AgreementToleranceSeconds = 0.15;
+
     private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "mov_text", "text", "webvtt"];
 
     /// <inheritdoc />
@@ -56,69 +62,132 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             return null;
         }
 
-        // Choose by cue density, not by language.
+        // Read every text track, then let them vote.
         //
-        // Language is irrelevant to timing - an English or Chinese dialogue track marks the same
-        // moments as the Japanese audio. What is *not* irrelevant is whether the track is full
-        // dialogue or just signs and songs. A signs track has a few dozen cues spread thinly across
-        // the episode, which produces a nearly flat correlation surface: every candidate then scores
-        // a uniqueness around 1.0 and is declined, including the correct one.
-        //
-        // Reading several tracks is cheap because Jellyfin extracts every text track in a single
-        // ffmpeg pass, so all but the first are cache hits.
-        MediaStream? bestStream = null;
-        CueTrack? bestTrack = null;
+        // Density is the wrong criterion and picking by language is worse. On a multi-subtitle
+        // release the densest track is often the group's own, carrying opening and ending karaoke,
+        // signs and a staff credit - and frequently authored on a different timing convention from
+        // the translations shipped alongside it. Measured on one such file, nine translation tracks
+        // agreed within 100ms while both Chinese tracks sat 230ms away, and the Chinese track was
+        // the densest. Choosing the track that most others agree with finds the timing the file as
+        // a whole is built on, instead of trusting whichever happens to have the most lines.
+        var tracks = new List<(MediaStream Stream, CueTrack Cues)>();
 
-        foreach (var candidate in streams)
+        foreach (var candidate in streams.Take(MaxTracksToCompare))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var parsed = await TryReadCuesAsync(candidate, source!, item, cancellationToken).ConfigureAwait(false);
-            if (parsed is null)
+            if (parsed is not null && parsed.Count >= MinimumCues)
             {
-                continue;
-            }
-
-            logger.LogDebug(
-                "Stream {Index} ({Language} {Codec}) of {Path} has {Count} usable cues.",
-                candidate.Index,
-                candidate.Language ?? "und",
-                candidate.Codec,
-                item.Path,
-                parsed.Count);
-
-            if (bestTrack is null || parsed.Count > bestTrack.Count)
-            {
-                bestStream = candidate;
-                bestTrack = parsed;
+                tracks.Add((candidate, parsed));
             }
         }
 
-        if (bestStream is null || bestTrack is null || bestTrack.Count < MinimumCues)
+        if (tracks.Count == 0)
         {
-            logger.LogDebug(
-                "No embedded subtitle track for {Path} had enough cues to align against; best had {Count}.",
-                item.Path,
-                bestTrack?.Count ?? 0);
+            logger.LogDebug("No embedded subtitle track for {Path} had enough cues to align against.", item.Path);
             return null;
         }
 
+        var (bestStream, bestTrack, agreement) = SelectConsensus(tracks, item);
+
         logger.LogInformation(
-            "Timing reference for {Path}: embedded stream {Index} ({Language} {Codec}) with {Count} cues.",
+            "Timing reference for {Path}: embedded stream {Index} ({Language} {Codec}), {Count} cues, agreeing with {Agreement} of {Total} tracks.",
             item.Path,
             bestStream.Index,
             bestStream.Language ?? "und",
             bestStream.Codec,
-            bestTrack.Count);
+            bestTrack.Count,
+            agreement,
+            tracks.Count - 1);
 
         var duration = item.RunTimeTicks.HasValue
             ? TimeSpan.FromTicks(item.RunTimeTicks.Value).TotalSeconds
             : bestTrack.LastEndSeconds;
 
         var language = string.IsNullOrEmpty(bestStream.Language) ? bestStream.Codec : bestStream.Language;
-        var description = $"embedded {language} subtitles ({bestTrack.Count} cues)";
+        var description = tracks.Count > 1
+            ? $"embedded {language} subtitles ({bestTrack.Count} cues, agreeing with {agreement}/{tracks.Count - 1} other tracks)"
+            : $"embedded {language} subtitles ({bestTrack.Count} cues)";
 
         return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true, bestTrack);
+    }
+
+    /// <summary>
+    /// Picks the track whose timing the most other tracks agree with.
+    /// </summary>
+    /// <remarks>
+    /// Every pair is compared on cue starts, so differences in how lines are split do not count
+    /// against agreement. A track that no others corroborate is a poor reference no matter how
+    /// detailed it is.
+    /// </remarks>
+    private (MediaStream Stream, CueTrack Cues, int Agreement) SelectConsensus(
+        List<(MediaStream Stream, CueTrack Cues)> tracks,
+        BaseItem item)
+    {
+        if (tracks.Count == 1)
+        {
+            return (tracks[0].Stream, tracks[0].Cues, 0);
+        }
+
+        var duration = item.RunTimeTicks.HasValue
+            ? TimeSpan.FromTicks(item.RunTimeTicks.Value).TotalSeconds
+            : tracks.Max(t => t.Cues.LastEndSeconds);
+
+        var signals = tracks
+            .Select(t => ActivitySignal.FromCueStarts(t.Cues, duration))
+            .ToList();
+
+        var search = new LinearFitSearch(new LinearFitOptions
+        {
+            MaxSearchOffsetSeconds = 30,
+            EnableFramerateSearch = false,
+        });
+
+        var agreement = new int[tracks.Count];
+
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            for (var j = i + 1; j < tracks.Count; j++)
+            {
+                var fits = search.Search(signals[i], tracks[j].Cues, scales: null, onsets: true);
+                if (fits.Count == 0)
+                {
+                    continue;
+                }
+
+                if (Math.Abs(fits[0].OffsetSeconds) <= AgreementToleranceSeconds)
+                {
+                    agreement[i]++;
+                    agreement[j]++;
+                }
+            }
+        }
+
+        var bestIndex = 0;
+        for (var i = 1; i < tracks.Count; i++)
+        {
+            // Most corroboration wins; among equally corroborated tracks, take the fullest.
+            if (agreement[i] > agreement[bestIndex] ||
+                (agreement[i] == agreement[bestIndex] && tracks[i].Cues.Count > tracks[bestIndex].Cues.Count))
+            {
+                bestIndex = i;
+            }
+        }
+
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            logger.LogDebug(
+                "  stream {Index} ({Language}): {Count} cues, agrees with {Agreement} other tracks{Chosen}",
+                tracks[i].Stream.Index,
+                tracks[i].Stream.Language ?? "und",
+                tracks[i].Cues.Count,
+                agreement[i],
+                i == bestIndex ? " <- chosen" : string.Empty);
+        }
+
+        return (tracks[bestIndex].Stream, tracks[bestIndex].Cues, agreement[bestIndex]);
     }
 
     private static List<MediaStream> SelectStreams(MediaSourceInfo? source)

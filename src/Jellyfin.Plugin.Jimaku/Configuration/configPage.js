@@ -7,7 +7,7 @@ const FIELDS = {
         'EnableAudioFallback', 'DetectReferenceBias'
     ],
     number: [
-        'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
+        'MinCorrelation', 'MinOnsetCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
         'MinCorrectionSeconds',
         'RetryDeclinedAfterDays', 'KaraokePolicy'
     ],
@@ -240,6 +240,8 @@ function renderCandidates(view, candidates, itemId) {
             ? `<div><strong>${escapeHtml(c.Verdict)}</strong>` +
               ` &middot; r ${Number(c.Correlation).toFixed(2)}` +
               ` &middot; uniqueness ${Number(c.PeakRatio).toFixed(2)}` +
+              (c.Coverage != null ? ` &middot; covers ${(c.Coverage * 100).toFixed(0)}% of dialogue` : '') +
+              (c.OnScreenRatio != null ? ` &middot; on screen ${(c.OnScreenRatio * 100).toFixed(0)}%` : '') +
               (c.Correction && c.Correction !== 'unchanged' ? ` &middot; ${escapeHtml(c.Correction)}` : '') +
               `</div><div style="opacity:0.75;font-size:0.9em;">${escapeHtml(c.TimingNotes || '')}</div>`
             : '<span style="opacity:0.6;">not measured</span>';

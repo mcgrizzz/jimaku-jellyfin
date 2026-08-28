@@ -33,6 +33,15 @@ public sealed class AlignmentResult
     public double PeakRatio { get; set; }
 
     /// <summary>
+    /// Gets or sets the fraction of reference cues this subtitle also marks. A well-aligned but
+    /// incomplete subtitle scores well on correlation and poorly here.
+    /// </summary>
+    public double Coverage { get; set; }
+
+    /// <summary>Gets or sets the share of the runtime this subtitle has something on screen.</summary>
+    public double OnScreenRatio { get; set; }
+
+    /// <summary>
     /// Gets or sets the per-block offsets when <see cref="Verdict"/> is
     /// <see cref="SyncVerdict.PiecewiseCut"/>. Empty otherwise.
     /// </summary>
