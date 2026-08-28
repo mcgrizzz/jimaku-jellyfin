@@ -1,0 +1,29 @@
+<!--
+  Optional side-loaded assembly providing a Silero VAD implementation of IVoiceActivityDetector.
+
+  This is deliberately NOT part of the main plugin: Microsoft.ML.OnnxRuntime carries ~185 MB of
+  native binaries across all RIDs, which is an unreasonable payload for a fallback path that only
+  runs on episodes with no embedded subtitle track. Users who want it drop this DLL, the ONNX
+  Runtime assemblies for their platform, and silero_vad.onnx into the plugin directory; the main
+  plugin discovers the type by name and falls back to its built-in detector if anything is missing.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Jellyfin.Plugin.Jimaku.Silero</RootNamespace>
+    <AssemblyName>Jellyfin.Plugin.Jimaku.Silero</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisMode>Recommended</AnalysisMode>
+    <NoWarn>$(NoWarn);CA1848;CA1031;CA2007</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
+    <ProjectReference Include="..\Jellyfin.Plugin.Jimaku\Jellyfin.Plugin.Jimaku.csproj" />
+  </ItemGroup>
+
+</Project>

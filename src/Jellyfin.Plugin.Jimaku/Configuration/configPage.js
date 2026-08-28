@@ -1,0 +1,248 @@
+const PLUGIN_ID = '9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80';
+
+const FIELDS = {
+    checkbox: [
+        'EnableScheduledTask', 'OverwriteExisting', 'AllowArchives',
+        'EnableFramerateCorrection', 'AllowPiecewiseOnDemand', 'AllowPiecewiseScheduled',
+        'EnableAudioFallback'
+    ],
+    number: [
+        'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MinNameScore',
+        'RetryDeclinedAfterDays', 'KaraokePolicy'
+    ],
+    text: ['ApiKey', 'LanguageTag', 'SileroModelPath']
+};
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+}
+
+function loadConfig(view) {
+    return ApiClient.getPluginConfiguration(PLUGIN_ID).then(config => {
+        FIELDS.text.forEach(id => { view.querySelector('#' + id).value = config[id] ?? ''; });
+        FIELDS.number.forEach(id => { view.querySelector('#' + id).value = config[id] ?? 0; });
+        FIELDS.checkbox.forEach(id => { view.querySelector('#' + id).checked = !!config[id]; });
+        return config;
+    });
+}
+
+function populateLibraries(view, selectedIds) {
+    return ApiClient.getVirtualFolders().then(folders => {
+        const select = view.querySelector('#LibraryIds');
+        const selected = new Set(selectedIds || []);
+        select.innerHTML = folders
+            .map(f => `<option value="${escapeHtml(f.ItemId)}"${selected.has(f.ItemId) ? ' selected' : ''}>${escapeHtml(f.Name)}</option>`)
+            .join('');
+    });
+}
+
+function saveConfig(view) {
+    Dashboard.showLoadingMsg();
+    return ApiClient.getPluginConfiguration(PLUGIN_ID).then(config => {
+        FIELDS.text.forEach(id => { config[id] = view.querySelector('#' + id).value.trim(); });
+        FIELDS.number.forEach(id => { config[id] = Number(view.querySelector('#' + id).value); });
+        FIELDS.checkbox.forEach(id => { config[id] = view.querySelector('#' + id).checked; });
+
+        config.LibraryIds = Array.from(view.querySelector('#LibraryIds').selectedOptions).map(o => o.value);
+
+        return ApiClient.updatePluginConfiguration(PLUGIN_ID, config)
+            .then(result => Dashboard.processPluginConfigurationUpdateResult(result));
+    }).catch(err => {
+        Dashboard.hideLoadingMsg();
+        Dashboard.alert({ message: 'Could not save settings: ' + err });
+    });
+}
+
+function testKey(view) {
+    const target = view.querySelector('#KeyResult');
+    target.textContent = 'Checking…';
+
+    // ApiClient.ajax injects the Jellyfin auth header; never build it by hand.
+    ApiClient.ajax({
+        type: 'POST',
+        url: ApiClient.getUrl('Jellyfin.Plugin.Jimaku/ValidateApiKey'),
+        data: JSON.stringify({ ApiKey: view.querySelector('#ApiKey').value.trim() }),
+        contentType: 'application/json',
+        dataType: 'json'
+    }).then(valid => {
+        target.textContent = valid
+            ? 'The key works.'
+            : 'Jimaku rejected that key. Check it on your account page.';
+    }).catch(() => {
+        target.textContent = 'Could not reach Jimaku to check the key.';
+    });
+}
+
+function searchEpisodes(view, term) {
+    const container = view.querySelector('#EpisodeResults');
+    if (!term || term.length < 3) {
+        container.innerHTML = '';
+        return;
+    }
+
+    ApiClient.getItems(ApiClient.getCurrentUserId(), {
+        SearchTerm: term,
+        IncludeItemTypes: 'Episode',
+        Recursive: true,
+        Limit: 15,
+        Fields: 'Path,ParentId'
+    }).then(result => {
+        if (!result.Items.length) {
+            container.innerHTML = '<p class="fieldDescription">No episodes matched.</p>';
+            return;
+        }
+
+        container.innerHTML = result.Items.map(item => {
+            const label = `${escapeHtml(item.SeriesName || '')} S${item.ParentIndexNumber ?? '?'}E${item.IndexNumber ?? '?'} — ${escapeHtml(item.Name)}`;
+            return `<div style="display:flex;gap:0.5em;align-items:center;margin:0.35em 0;flex-wrap:wrap;">
+                <span style="flex:1 1 20em;">${label}</span>
+                <button is="emby-button" type="button" class="raised jimaku-auto" data-id="${item.Id}">
+                    <span>Fetch best</span></button>
+                <button is="emby-button" type="button" class="raised jimaku-list" data-id="${item.Id}">
+                    <span>Show candidates</span></button>
+            </div>`;
+        }).join('');
+    });
+}
+
+function renderResult(view, result) {
+    const status = view.querySelector('#ActionStatus');
+    const verdictText = {
+        Exact: 'Attached unchanged — already in sync',
+        ConstantOffset: 'Attached with a constant shift',
+        FramerateDrift: 'Attached with a framerate correction',
+        PiecewiseCut: 'Attached, matched to a different cut',
+        Declined: 'Declined — nothing was written'
+    }[result.Verdict] || result.Verdict;
+
+    const detail = result.Applied
+        ? `<div>${escapeHtml(result.FileName)}</div>
+           <div>Correction: ${escapeHtml(result.Correction)} &middot; correlation ${result.Correlation.toFixed(2)} &middot; uniqueness ${result.PeakRatio.toFixed(2)}</div>
+           <div>Reference: ${escapeHtml(result.ReferenceSource)}</div>
+           <div>Written to ${escapeHtml(result.SidecarPath)}</div>`
+        : '';
+
+    status.innerHTML = `<strong>${escapeHtml(verdictText)}</strong>
+        <div>${escapeHtml(result.Message)}</div>${detail}`;
+
+    if (result.Candidates && result.Candidates.length) {
+        renderCandidates(view, result.Candidates, null);
+    }
+}
+
+function renderCandidates(view, candidates, itemId) {
+    const container = view.querySelector('#CandidateResults');
+    if (!candidates.length) {
+        container.innerHTML = '<p class="fieldDescription">Jimaku has nothing for this episode.</p>';
+        return;
+    }
+
+    const rows = candidates.map(c => {
+        const action = (itemId && c.Usable)
+            ? `<button is="emby-button" type="button" class="raised jimaku-apply"
+                 data-id="${itemId}" data-entry="${c.EntryId}"
+                 data-url="${escapeHtml(c.Url)}" data-file="${escapeHtml(c.FileName)}">
+                 <span>Use this</span></button>`
+            : escapeHtml(c.RejectedBecause || '');
+
+        return `<tr>
+            <td style="padding:0.25em 0.75em 0.25em 0;">${escapeHtml(c.FileName)}</td>
+            <td style="padding:0.25em 0.75em;">${c.NameScore}</td>
+            <td style="padding:0.25em 0.75em;">${escapeHtml(c.NameNotes)}</td>
+            <td style="padding:0.25em 0;">${action}</td>
+        </tr>`;
+    }).join('');
+
+    container.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="text-align:left;">
+            <th style="padding-right:0.75em;">File</th><th style="padding:0 0.75em;">Name match</th>
+            <th style="padding:0 0.75em;">Notes</th><th></th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        <p class="fieldDescription" style="margin-top:0.5em;">
+            The name match is only a pre-filter. Timing is verified against your media before
+            anything is written.
+        </p>`;
+}
+
+function runAuto(view, itemId) {
+    const status = view.querySelector('#ActionStatus');
+    status.textContent = 'Searching, downloading and verifying… this can take a minute if the audio has to be analysed.';
+    view.querySelector('#CandidateResults').innerHTML = '';
+
+    ApiClient.ajax({
+        type: 'POST',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Auto`),
+        dataType: 'json'
+    }).then(result => renderResult(view, result))
+      .catch(err => { status.textContent = 'Failed: ' + err; });
+}
+
+function listCandidates(view, itemId) {
+    const status = view.querySelector('#ActionStatus');
+    status.textContent = 'Looking up Jimaku…';
+
+    ApiClient.ajax({
+        type: 'GET',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Candidates`),
+        dataType: 'json'
+    }).then(candidates => {
+        status.textContent = `${candidates.length} file(s) found.`;
+        renderCandidates(view, candidates, itemId);
+    }).catch(err => { status.textContent = 'Failed: ' + err; });
+}
+
+function applyCandidate(view, button) {
+    const status = view.querySelector('#ActionStatus');
+    status.textContent = 'Downloading and verifying…';
+
+    ApiClient.ajax({
+        type: 'POST',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${button.dataset.id}/Apply`),
+        data: JSON.stringify({
+            EntryId: Number(button.dataset.entry),
+            FileName: button.dataset.file,
+            Url: button.dataset.url
+        }),
+        contentType: 'application/json',
+        dataType: 'json'
+    }).then(result => renderResult(view, result))
+      .catch(err => { status.textContent = 'Failed: ' + err; });
+}
+
+export default function (view) {
+    view.addEventListener('viewshow', function () {
+        Dashboard.showLoadingMsg();
+        loadConfig(view)
+            .then(config => populateLibraries(view, config.LibraryIds))
+            .finally(() => Dashboard.hideLoadingMsg());
+    });
+
+    view.querySelector('#JimakuConfigForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        saveConfig(view);
+        return false;
+    });
+
+    view.querySelector('#TestKey').addEventListener('click', () => testKey(view));
+
+    let searchTimer;
+    view.querySelector('#EpisodeSearch').addEventListener('input', function (e) {
+        clearTimeout(searchTimer);
+        const term = e.target.value.trim();
+        searchTimer = setTimeout(() => searchEpisodes(view, term), 350);
+    });
+
+    // Delegated, because the result rows are rebuilt on every search.
+    view.addEventListener('click', function (e) {
+        const auto = e.target.closest('.jimaku-auto');
+        if (auto) { runAuto(view, auto.dataset.id); return; }
+
+        const list = e.target.closest('.jimaku-list');
+        if (list) { listCandidates(view, list.dataset.id); return; }
+
+        const apply = e.target.closest('.jimaku-apply');
+        if (apply) { applyCandidate(view, apply); }
+    });
+}

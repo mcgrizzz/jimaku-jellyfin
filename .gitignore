@@ -1,0 +1,12 @@
+bin/
+obj/
+# Build scratch. The published package lives in dist/, which IS tracked so that
+# raw.githubusercontent.com can serve it as a Jellyfin plugin repository.
+artifacts/
+*.user
+*.suo
+.vs/
+.idea/
+*.nupkg
+tests/local.runsettings
+TestResults/

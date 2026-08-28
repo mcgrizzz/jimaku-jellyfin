@@ -1,0 +1,223 @@
+<div id="JimakuConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-controller="__plugin/jimakujs">
+  <div data-role="content">
+    <div class="content-primary">
+
+      <form id="JimakuConfigForm">
+        <h2>Jimaku</h2>
+        <p class="fieldDescription">
+          Finds Japanese subtitles on <a is="emby-linkbutton" class="button-link" href="https://jimaku.cc"
+          target="_blank" rel="noopener noreferrer">jimaku.cc</a>, checks each candidate against your
+          media's actual timing, corrects it where that is safe, and writes it as an external
+          sidecar. When it cannot establish confidence, it writes nothing and tells you why.
+        </p>
+
+        <fieldset class="verticalSection">
+          <legend>Account</legend>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="password" id="ApiKey" label="Jimaku API key" />
+            <div class="fieldDescription">
+              Generate one on your <a is="emby-linkbutton" class="button-link"
+              href="https://jimaku.cc/account" target="_blank" rel="noopener noreferrer">Jimaku
+              account page</a>. Every Jimaku request needs it.
+            </div>
+          </div>
+
+          <button is="emby-button" type="button" id="TestKey" class="raised block">
+            <span>Test key</span>
+          </button>
+          <div id="KeyResult" class="fieldDescription" style="margin-top:0.5em;"></div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Output</legend>
+
+          <div class="selectContainer">
+            <select is="emby-select" id="LanguageTag" label="Sidecar language tag">
+              <option value="jpn">jpn (matches Jellyfin's own naming)</option>
+              <option value="ja">ja</option>
+            </select>
+            <div class="fieldDescription">
+              Both resolve to Japanese. Files are written as
+              <code>&lt;episode filename&gt;.&lt;tag&gt;.ass</code> beside the media.
+            </div>
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="OverwriteExisting" />
+            <span>Overwrite an existing subtitle at the same path</span>
+          </label>
+          <div class="fieldDescription">
+            Off by default, so a subtitle you placed or corrected yourself is never replaced. A
+            numbered suffix is used instead.
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="AllowArchives" />
+            <span>Open ZIP archives when no loose subtitle file is offered</span>
+          </label>
+          <div class="fieldDescription">RAR and 7z cannot be opened and are always skipped.</div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Verification</legend>
+          <p class="fieldDescription">
+            A candidate is only attached when its timing demonstrably matches this episode. These
+            thresholds decide how much evidence is enough. On synthetic tests the worst wrong-episode
+            match scored 0.28 correlation and 1.03 uniqueness, while correct matches scored 1.00 and
+            1.51; the defaults sit between those.
+          </p>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinCorrelation" step="0.05" min="0" max="1"
+                   label="Minimum correlation (0-1)" />
+            <div class="fieldDescription">
+              How strongly the subtitle's timings must agree with the reference. Raise it to attach
+              fewer but safer subtitles.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinPeakRatio" step="0.05" min="1"
+                   label="Minimum uniqueness" />
+            <div class="fieldDescription">
+              How much better the chosen alignment must be than the next best. This is what catches
+              a subtitle from a different episode, which can otherwise correlate deceptively well.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MaxOffsetSeconds" step="1" min="0"
+                   label="Largest correction to apply (seconds)" />
+            <div class="fieldDescription">
+              A subtitle needing more than this is more likely the wrong file than a badly timed
+              right one.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinNameScore" step="5" min="0" max="100"
+                   label="Minimum filename match score (0-100)" />
+            <div class="fieldDescription">
+              A cheap pre-filter so timing analysis is only spent on plausible candidates. It never
+              decides the outcome on its own.
+            </div>
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="EnableFramerateCorrection" />
+            <span>Correct framerate drift</span>
+          </label>
+          <div class="fieldDescription">
+            Handles PAL and NTSC conversions, where timings drift steadily rather than sitting at a
+            constant offset. Karaoke and animation tags are rescaled to match.
+          </div>
+
+          <div class="selectContainer">
+            <select is="emby-select" id="KaraokePolicy" label="When a framerate fix meets karaoke">
+              <option value="0">Rescale the karaoke timings too</option>
+              <option value="1">Decline rather than risk breaking the effect</option>
+            </select>
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="AllowPiecewiseOnDemand" />
+            <span>Match different cuts when I ask for a subtitle directly</span>
+          </label>
+          <div class="fieldDescription">
+            Splits the subtitle into sections with separate offsets, for broadcast versus disc
+            releases where footage was added or removed.
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="AllowPiecewiseScheduled" />
+            <span>Match different cuts during the scheduled sweep as well</span>
+          </label>
+          <div class="fieldDescription">
+            Off by default. It is the most permissive correction available, and an unattended job is
+            the worst place to be permissive.
+          </div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Timing reference</legend>
+          <p class="fieldDescription">
+            Timings are compared against an embedded subtitle track where one exists, which is fast
+            and reliable regardless of the track's language.
+          </p>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="EnableAudioFallback" />
+            <span>Analyse the Japanese audio when there is no embedded subtitle track</span>
+          </label>
+          <div class="fieldDescription">
+            Considerably weaker for anime, where a near-continuous score gives speech detection
+            little to work with. Episodes it cannot resolve are declined rather than guessed at.
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="text" id="SileroModelPath"
+                   label="Silero VAD model path (optional)" />
+            <div class="fieldDescription">
+              Path to <code>silero_vad.onnx</code>. A trained detector handles scored audio far
+              better than the built-in one. It also needs
+              <code>Jellyfin.Plugin.Jimaku.Silero.dll</code> and the ONNX Runtime libraries for this
+              server's platform in the plugin folder; without them this is ignored.
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Scheduled sweep</legend>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="EnableScheduledTask" />
+            <span>Enable the scheduled sweep for episodes with no Japanese subtitles</span>
+          </label>
+          <div class="fieldDescription">
+            Runs daily. Trigger it manually from Dashboard &rarr; Scheduled Tasks.
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="RetryDeclinedAfterDays" step="1" min="1"
+                   label="Retry declined episodes after (days)" />
+            <div class="fieldDescription">
+              Jimaku gains uploads over time, so a decline is a statement about today rather than
+              forever.
+            </div>
+          </div>
+
+          <div class="selectContainer">
+            <label class="selectLabel" for="LibraryIds">Libraries to sweep</label>
+            <select is="emby-select" id="LibraryIds" multiple size="6"></select>
+            <div class="fieldDescription">
+              Select none to sweep everything. Narrow this if the server holds non-anime content.
+            </div>
+          </div>
+        </fieldset>
+
+        <button is="emby-button" type="submit" class="raised button-submit block">
+          <span>Save</span>
+        </button>
+      </form>
+
+      <fieldset class="verticalSection" style="margin-top:2em;">
+        <legend>Fetch a subtitle now</legend>
+        <p class="fieldDescription">
+          Search for an episode, then let the plugin choose, or review the candidates and pick one
+          yourself.
+        </p>
+
+        <div class="inputContainer">
+          <input is="emby-input" type="text" id="EpisodeSearch" label="Search episodes" />
+        </div>
+
+        <div id="EpisodeResults"></div>
+        <div id="ActionStatus" class="fieldDescription" style="margin-top:1em;"></div>
+        <div id="CandidateResults" style="margin-top:1em;"></div>
+      </fieldset>
+
+    </div>
+  </div>
+</div>
