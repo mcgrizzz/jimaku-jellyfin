@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 4
+version: 5
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,6 +16,6 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Fix a crash resolving anime IDs: six entries in the community ID table type a field as a
-    string, which aborted the whole table and failed the request.
-  - Show the server's actual error message instead of "[object Response]".
+  - Find non-anime entries. Jimaku's search filters to anime by default even when given an
+    exact ID, so live-action entries were invisible; searches now retry without the filter.
+  - Show Jimaku's entry notes and unverified flag alongside each candidate.

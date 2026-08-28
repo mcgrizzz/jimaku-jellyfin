@@ -104,7 +104,9 @@ public class JimakuApiClientTests
     [Fact]
     public async Task Search_BuildsTheExpectedQueryStrings()
     {
-        var handler = new StubHandler(StubHandler.Json("[]"));
+        // A non-empty result, so an ID search does not fall through to its non-anime retry and
+        // shift the request order.
+        var handler = new StubHandler(StubHandler.Json(EntriesJson));
         var client = Create(handler);
 
         await client.SearchByAniListIdAsync(154587, "k", CancellationToken.None);
@@ -114,10 +116,13 @@ public class JimakuApiClientTests
 
         var urls = handler.Requests.Select(r => r.RequestUri!.AbsoluteUri).ToList();
 
-        Assert.Equal("https://jimaku.cc/api/entries/search?anilist_id=154587", urls[0]);
-        Assert.Equal("https://jimaku.cc/api/entries/search?tmdb_id=tv%3A209867", urls[1]);
+        // anime is always stated explicitly: it defaults to true server-side and is applied
+        // before the ID match, so leaving it off hides every non-anime entry.
+        Assert.Equal("https://jimaku.cc/api/entries/search?anilist_id=154587&anime=true", urls[0]);
+        Assert.Equal("https://jimaku.cc/api/entries/search?tmdb_id=tv%3A209867&anime=true", urls[1]);
         Assert.Equal("https://jimaku.cc/api/entries/search?query=Frieren%202&anime=false", urls[2]);
         Assert.Equal("https://jimaku.cc/api/entries/42/files?episode=12", urls[3]);
+        Assert.Equal(4, urls.Count);
     }
 
     [Fact]
@@ -245,5 +250,144 @@ public class RateLimiterTests
 
         time.Advance(TimeSpan.FromSeconds(31));
         await pending.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+}
+
+/// <summary>
+/// Pins the models to the shapes jimaku.cc's OpenAPI document actually declares, rather than to the
+/// happy-path sample I first wrote them against.
+/// </summary>
+public class JimakuSchemaConformanceTests
+{
+    private static JimakuApiClient Create(StubHandler handler) =>
+        new(new HttpClient(handler), NullLogger<JimakuApiClient>.Instance);
+
+    [Fact]
+    public async Task Entry_WithOnlyTheRequiredFields_Deserializes()
+    {
+        // The spec marks only id, name, flags and last_modified as required.
+        const string Json = """
+        [{"id": 7, "name": "Minimal", "last_modified": "2024-01-01T00:00:00Z", "flags": {}}]
+        """;
+
+        var entry = Assert.Single(await Create(new StubHandler(StubHandler.Json(Json)))
+            .SearchByAniListIdAsync(1, "k", CancellationToken.None));
+
+        Assert.Equal(7, entry.Id);
+        Assert.Equal("Minimal", entry.Name);
+        Assert.Null(entry.JapaneseName);
+        Assert.Null(entry.EnglishName);
+        Assert.Null(entry.AniListId);
+        Assert.Null(entry.TmdbId);
+        Assert.Null(entry.Notes);
+        Assert.False(entry.Flags.Anime);
+    }
+
+    [Fact]
+    public async Task Entry_WithEveryNullableFieldExplicitlyNull_Deserializes()
+    {
+        const string Json = """
+        [{"id": 7, "name": "Nulls", "last_modified": "2024-01-01T00:00:00Z",
+          "japanese_name": null, "english_name": null, "anilist_id": null,
+          "tmdb_id": null, "creator_id": null, "notes": null,
+          "flags": {"adult": false, "anime": true, "external": false, "movie": false, "unverified": true}}]
+        """;
+
+        var entry = Assert.Single(await Create(new StubHandler(StubHandler.Json(Json)))
+            .SearchByAniListIdAsync(1, "k", CancellationToken.None));
+
+        Assert.Null(entry.AniListId);
+        Assert.True(entry.Flags.Unverified);
+    }
+
+    [Fact]
+    public async Task Entry_WithUnknownFields_IsNotRejected()
+    {
+        // The spec is versioned "beta"; new fields should not break an existing client.
+        const string Json = """
+        [{"id": 7, "name": "Future", "last_modified": "2024-01-01T00:00:00Z", "flags": {"anime": true},
+          "some_new_field": {"nested": [1,2,3]}, "another": "value"}]
+        """;
+
+        var entry = Assert.Single(await Create(new StubHandler(StubHandler.Json(Json)))
+            .SearchByAniListIdAsync(1, "k", CancellationToken.None));
+
+        Assert.Equal("Future", entry.Name);
+    }
+
+    [Fact]
+    public async Task Entry_LargeIds_SurviveAsInt64()
+    {
+        // id and creator_id are int64 in the spec; anilist_id is int32.
+        const string Json = """
+        [{"id": 9007199254740993, "name": "Big", "last_modified": "2024-01-01T00:00:00Z", "flags": {}}]
+        """;
+
+        var entry = Assert.Single(await Create(new StubHandler(StubHandler.Json(Json)))
+            .SearchByAniListIdAsync(1, "k", CancellationToken.None));
+
+        Assert.Equal(9007199254740993L, entry.Id);
+    }
+
+    [Fact]
+    public async Task Search_FindsNoAnimeEntries_RetriesAsNonAnime()
+    {
+        // anime defaults to true server-side and is applied before the ID match, so a live-action
+        // entry is invisible to an ID search unless the flag is flipped.
+        var handler = new StubHandler(
+            StubHandler.Json("[]"),
+            StubHandler.Json("""[{"id": 3, "name": "Live action drama", "last_modified": "2024-01-01T00:00:00Z", "flags": {"anime": false}}]"""));
+
+        var entries = await Create(handler).SearchByAniListIdAsync(154587, "k", CancellationToken.None);
+
+        Assert.Single(entries);
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.EndsWith("&anime=true", handler.Requests[0].RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+        Assert.EndsWith("&anime=false", handler.Requests[1].RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Search_FindsAnimeEntries_DoesNotSpendASecondRequest()
+    {
+        // The retry must not cost a call on the common path; the budget is 25 a minute.
+        var handler = new StubHandler(
+            StubHandler.Json("""[{"id": 1, "name": "Anime", "last_modified": "2024-01-01T00:00:00Z", "flags": {"anime": true}}]"""));
+
+        await Create(handler).SearchByAniListIdAsync(154587, "k", CancellationToken.None);
+
+        Assert.Single(handler.Requests);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-99)]
+    public async Task GetFiles_NegativeEpisodeNumber_IsOmittedRatherThanSent(int episode)
+    {
+        // The spec sets minimum: 0 on episode, so a negative value is a 400.
+        var handler = new StubHandler(StubHandler.Json("[]"));
+
+        await Create(handler).GetFilesAsync(42, episode, "k", CancellationToken.None);
+
+        Assert.DoesNotContain("episode=", handler.Requests[0].RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GetFiles_EpisodeZero_IsSent()
+    {
+        // minimum is 0, not 1: episode 0 is legitimate for specials and pilots.
+        var handler = new StubHandler(StubHandler.Json("[]"));
+
+        await Create(handler).GetFilesAsync(42, 0, "k", CancellationToken.None);
+
+        Assert.EndsWith("/files?episode=0", handler.Requests[0].RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SearchByAniListId_NegativeId_MakesNoRequest()
+    {
+        var handler = new StubHandler(StubHandler.Json("[]"));
+
+        Assert.Empty(await Create(handler).SearchByAniListIdAsync(-5, "k", CancellationToken.None));
+        Assert.Empty(handler.Requests);
     }
 }

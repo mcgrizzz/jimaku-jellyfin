@@ -202,6 +202,8 @@ public class JimakuController(
     {
         EntryId = candidate.EntryId,
         EntryName = candidate.EntryName,
+        EntryNotes = candidate.EntryNotes,
+        EntryUnverified = candidate.EntryUnverified,
         FileName = candidate.File.Name,
         Url = candidate.File.Url,
         Size = candidate.File.Size,

@@ -19,6 +19,12 @@ public class CandidateDto
     /// <summary>Gets or sets the entry name.</summary>
     public string EntryName { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets editor notes on the entry.</summary>
+    public string EntryNotes { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether the entry is flagged unverified.</summary>
+    public bool EntryUnverified { get; set; }
+
     /// <summary>Gets or sets the file name.</summary>
     public string FileName { get; set; } = string.Empty;
 

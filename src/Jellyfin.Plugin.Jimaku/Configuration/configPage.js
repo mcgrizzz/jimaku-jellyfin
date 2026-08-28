@@ -221,8 +221,14 @@ function renderCandidates(view, candidates, itemId) {
                  <span>Use this</span></button>`
             : escapeHtml(c.RejectedBecause || '');
 
+        // Entry notes frequently say which release the subtitles were timed for.
+        const notes = c.EntryNotes
+            ? `<div style="opacity:0.75;font-size:0.9em;">${escapeHtml(c.EntryNotes)}</div>` : '';
+        const unverified = c.EntryUnverified
+            ? '<span title="this entry is flagged unverified on Jimaku" style="opacity:0.75;">[unverified] </span>' : '';
+
         return `<tr>
-            <td style="padding:0.25em 0.75em 0.25em 0;">${escapeHtml(c.FileName)}</td>
+            <td style="padding:0.25em 0.75em 0.25em 0;">${unverified}${escapeHtml(c.FileName)}${notes}</td>
             <td style="padding:0.25em 0.75em;">${c.NameScore}</td>
             <td style="padding:0.25em 0.75em;">${escapeHtml(c.NameNotes)}</td>
             <td style="padding:0.25em 0;">${action}</td>

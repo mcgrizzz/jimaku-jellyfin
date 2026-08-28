@@ -94,6 +94,8 @@ public sealed class JimakuSyncService(
                 {
                     EntryId = entry.Id,
                     EntryName = entry.Name,
+                    EntryNotes = entry.Notes ?? string.Empty,
+                    EntryUnverified = entry.Flags.Unverified,
                     File = filtered.File,
                     Rejection = filtered.Rejection,
                     NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),

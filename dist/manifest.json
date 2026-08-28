@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.3.0",
-                "changelog": "- Fix a crash resolving anime IDs: six entries in the community ID table type a field as a\n  string, which aborted the whole table and failed the request.\n- Show the server's actual error message instead of \"[object Response]\".",
+                "version": "1.0.4.0",
+                "changelog": "- Find non-anime entries. Jimaku's search filters to anime by default even when given an\n  exact ID, so live-action entries were invisible; searches now retry without the filter.\n- Show Jimaku's entry notes and unverified flag alongside each candidate.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.3.0.zip",
-                "checksum": "61be82193b51316c620ae4ffa7ff8453",
-                "timestamp": "2026-08-28T18:34:02Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.4.0.zip",
+                "checksum": "b0b6c1fc45a8c08a61cb7b7a37f30dd8",
+                "timestamp": "2026-08-28T18:38:51Z"
             }
         ]
     }

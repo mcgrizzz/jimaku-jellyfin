@@ -49,11 +49,20 @@ public sealed class JimakuApiClient : IDisposable
     /// <param name="apiKey">The API key.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Matching entries, best first.</returns>
-    public Task<IReadOnlyList<JimakuEntry>> SearchByAniListIdAsync(
+    public async Task<IReadOnlyList<JimakuEntry>> SearchByAniListIdAsync(
         int aniListId,
         string apiKey,
-        CancellationToken cancellationToken) =>
-        SearchAsync($"/entries/search?anilist_id={aniListId.ToString(CultureInfo.InvariantCulture)}", apiKey, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        if (aniListId < 0)
+        {
+            return Array.Empty<JimakuEntry>();
+        }
+
+        var id = aniListId.ToString(CultureInfo.InvariantCulture);
+        return await SearchBothFlagsAsync($"/entries/search?anilist_id={id}", apiKey, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Searches entries by TMDB ID.
@@ -69,8 +78,10 @@ public sealed class JimakuApiClient : IDisposable
         string apiKey,
         CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tmdbId);
+
         var prefix = isMovie ? "movie" : "tv";
-        return SearchAsync(
+        return SearchBothFlagsAsync(
             $"/entries/search?tmdb_id={Uri.EscapeDataString(prefix + ":" + tmdbId)}",
             apiKey,
             cancellationToken);
@@ -117,7 +128,7 @@ public sealed class JimakuApiClient : IDisposable
         CancellationToken cancellationToken)
     {
         var path = $"/entries/{entryId.ToString(CultureInfo.InvariantCulture)}/files";
-        if (episode.HasValue)
+        if (episode is >= 0)
         {
             path += $"?episode={episode.Value.ToString(CultureInfo.InvariantCulture)}";
         }
@@ -176,6 +187,34 @@ public sealed class JimakuApiClient : IDisposable
         string apiKey,
         CancellationToken cancellationToken) =>
         await GetAsync<JimakuEntry>(path, apiKey, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Runs a search against anime entries and, if nothing matches, against non-anime ones.
+    /// </summary>
+    /// <remarks>
+    /// The <c>anime</c> parameter defaults to <see langword="true"/> server-side and is applied
+    /// before the ID match, so an entry that is not flagged as anime cannot be found even by an
+    /// exact AniList or TMDB ID. Live-action Japanese drama is the obvious casualty. The second
+    /// request only happens when the first returns nothing, so the common path still costs one
+    /// call against a 25-per-minute budget.
+    /// </remarks>
+    private async Task<IReadOnlyList<JimakuEntry>> SearchBothFlagsAsync(
+        string path,
+        string apiKey,
+        CancellationToken cancellationToken)
+    {
+        var entries = await GetAsync<JimakuEntry>($"{path}&anime=true", apiKey, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (entries.Count > 0)
+        {
+            return entries;
+        }
+
+        _logger.LogDebug("No anime entries for {Path}; retrying as non-anime.", path);
+        return await GetAsync<JimakuEntry>($"{path}&anime=false", apiKey, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     private async Task<IReadOnlyList<T>> GetAsync<T>(
         string path,

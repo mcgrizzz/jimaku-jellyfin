@@ -61,6 +61,13 @@ public class JimakuEntry
     [JsonPropertyName("tmdb_id")]
     public string? TmdbId { get; set; }
 
+    /// <summary>
+    /// Gets or sets editor notes about the entry. Often says which release the subtitles were
+    /// timed for, which is exactly what matters when choosing between candidates.
+    /// </summary>
+    [JsonPropertyName("notes")]
+    public string? Notes { get; set; }
+
     /// <summary>Gets or sets the timestamp of the newest uploaded file.</summary>
     [JsonPropertyName("last_modified")]
     public DateTimeOffset LastModified { get; set; }
