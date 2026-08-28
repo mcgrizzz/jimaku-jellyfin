@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 1
+version: 2
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,4 +16,4 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Initial release.
+  - Fix a dependency cycle that stopped the server starting after installation.

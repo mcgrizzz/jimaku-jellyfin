@@ -8,6 +8,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Jimaku.Sync;
@@ -20,10 +21,19 @@ namespace Jellyfin.Plugin.Jimaku.Sync;
 /// the operation is instant regardless of file size, and removing the subtitle is a matter of
 /// deleting one small file.
 /// </remarks>
+/// <remarks>
+/// <para>
+/// <see cref="IProviderManager"/> is resolved when it is needed rather than injected, and that is
+/// load-bearing. Jellyfin builds <c>ProviderManager</c> -&gt; <c>SubtitleManager</c> -&gt; every
+/// registered <see cref="MediaBrowser.Controller.Subtitles.ISubtitleProvider"/>, and this plugin
+/// registers one. Taking <see cref="IProviderManager"/> as a constructor parameter therefore closes
+/// a dependency cycle that the container detects at startup, and the server refuses to boot.
+/// </para>
+/// </remarks>
 public sealed class SidecarWriter(
     ILibraryManager libraryManager,
     ILibraryMonitor libraryMonitor,
-    IProviderManager providerManager,
+    IServiceProvider serviceProvider,
     IFileSystem fileSystem,
     ILogger<SidecarWriter> logger)
 {
@@ -127,6 +137,8 @@ public sealed class SidecarWriter(
             ForceSave = true,
         };
 
+        // Deferred deliberately; see the note on the class about the startup dependency cycle.
+        var providerManager = serviceProvider.GetRequiredService<IProviderManager>();
         await providerManager.RefreshSingleItem(item, options, cancellationToken).ConfigureAwait(false);
     }
 }

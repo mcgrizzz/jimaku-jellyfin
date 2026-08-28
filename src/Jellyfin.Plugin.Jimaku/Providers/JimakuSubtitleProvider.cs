@@ -14,6 +14,7 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Providers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MediaBrowser.Controller.Providers;
 
@@ -35,10 +36,16 @@ namespace Jellyfin.Plugin.Jimaku.Providers;
 /// </para>
 /// </remarks>
 public class JimakuSubtitleProvider(
-    JimakuSyncService syncService,
+    IServiceProvider serviceProvider,
     ILibraryManager libraryManager,
     ILogger<JimakuSubtitleProvider> logger) : ISubtitleProvider
 {
+    // Every ISubtitleProvider is constructed while the container is still building
+    // IProviderManager, so anything pulled in here is pulled in mid-graph. Resolving the sync
+    // service on use keeps this constructor free of transitive dependencies and makes it
+    // impossible for a future dependency of the pipeline to deadlock server startup.
+    private JimakuSyncService SyncService => serviceProvider.GetRequiredService<JimakuSyncService>();
+
     /// <inheritdoc />
     public string Name => "Jimaku";
 
@@ -67,7 +74,7 @@ public class JimakuSubtitleProvider(
 
         try
         {
-            var candidates = await syncService.FindCandidatesAsync(episode, cancellationToken).ConfigureAwait(false);
+            var candidates = await SyncService.FindCandidatesAsync(episode, cancellationToken).ConfigureAwait(false);
 
             return candidates
                 .Where(c => c.IsUsable)
@@ -105,7 +112,7 @@ public class JimakuSubtitleProvider(
             throw new InvalidOperationException("The episode this subtitle belongs to could not be resolved.");
         }
 
-        var result = await syncService.SyncEpisodeAsync(
+        var result = await SyncService.SyncEpisodeAsync(
             episode,
             new SyncOptions
             {
