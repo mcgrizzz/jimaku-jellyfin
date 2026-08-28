@@ -63,14 +63,18 @@ public class PluginConfiguration : BasePluginConfiguration
     /// as already in sync and the file is written unchanged.
     /// </summary>
     /// <remarks>
-    /// A measured offset of a couple of hundred milliseconds says less about the subtitle than it
-    /// does about the reference. Embedded tracks are authored with their own lead-in, so aligning
-    /// to one inherits its timing habits, and a subtitle that was already well matched to the audio
-    /// can be nudged out of sync by "correcting" it. Subtitles also conventionally appear slightly
-    /// before speech, so an erroneous positive shift is the most noticeable kind. Below this
-    /// threshold, leaving the file alone is the safer bet.
+    /// <para>
+    /// Guards against acting on measurement noise, not against small genuine offsets. When the
+    /// correlation is high against a dense reference the measurement is reliable at this scale, and
+    /// a fifth of a second is perceptible, so refusing to apply it leaves subtitles visibly early.
+    /// </para>
+    /// <para>
+    /// Raise it towards 0.35 if corrections at this magnitude make things worse rather than better,
+    /// which happens when the reference track carries a pronounced lead-in of its own and the
+    /// subtitle was already well matched to the audio.
+    /// </para>
     /// </remarks>
-    public double MinCorrectionSeconds { get; set; } = 0.35;
+    public double MinCorrectionSeconds { get; set; } = 0.15;
 
     /// <summary>Gets or sets a value indicating whether framerate ratios are tested.</summary>
     public bool EnableFramerateCorrection { get; set; } = true;

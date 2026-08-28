@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 7
+version: 8
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,7 +16,7 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Prefer Japanese-only subtitles over Chinese/Japanese bilingual releases, which style the
-    Chinese as the prominent line. Chinese-only files are now rejected outright.
-  - Stop applying corrections below 0.35s. A small measured offset usually reflects the
-    reference track's own lead-in, and shifting a well-timed subtitle made it worse.
+  - Measure every candidate and pick the best, instead of taking the first that passes. Better
+    matches were previously never downloaded.
+  - Apply corrections down to 0.15s again; a fifth of a second is visible on screen. Raise
+    "Smallest correction worth applying" if that is too eager for your media.

@@ -91,9 +91,9 @@
             <input is="emby-input" type="number" id="MinCorrectionSeconds" step="0.05" min="0"
                    label="Smallest correction worth applying (seconds)" />
             <div class="fieldDescription">
-              Below this, the subtitle is written unchanged. A small measured offset often reflects
-              the embedded reference track's own lead-in rather than a fault in the subtitle, and
-              "correcting" it can push a well-timed file out of sync.
+              Below this, the subtitle is written unchanged. It exists to ignore measurement noise,
+              not genuine small offsets: a fifth of a second is visible on screen. Raise it towards
+              0.35 if corrections this small are making things worse rather than better.
             </div>
           </div>
 

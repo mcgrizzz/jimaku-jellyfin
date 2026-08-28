@@ -204,6 +204,11 @@ public sealed class JimakuSyncService(
 
         var aligner = new SubtitleAligner(configuration);
 
+        // Measure every candidate, then choose the best one - rather than taking the first that
+        // merely passes. Passing is a floor, not a ranking: the first acceptable file is often not
+        // the closest match, and stopping early means better candidates are never even downloaded.
+        var measured = new List<(SubtitleCandidate Candidate, SubtitleDocument Document, string FileName)>();
+
         foreach (var candidate in usable)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -251,17 +256,55 @@ public sealed class JimakuSyncService(
             }
 
             var alignment = Evaluate(candidate, document, reference, aligner, options);
-
             candidate.Alignment = alignment;
+            measured.Add((candidate, document, fileName));
 
-            if (!alignment.IsAcceptable)
+            logger.LogInformation(
+                "Measured {File} for {Name}: {Verdict}, correlation {Correlation:0.00}, uniqueness {PeakRatio:0.00}, {Transform}.",
+                fileName,
+                episode.Name,
+                alignment.Verdict,
+                alignment.Correlation,
+                alignment.PeakRatio,
+                alignment.Transform.Describe());
+
+            // A shared CRC32 proves the subtitle was released against this exact video file.
+            // Nothing measured can beat that, so there is no reason to keep downloading.
+            if (candidate.NameMatch.IsExactRelease)
             {
-                logger.LogInformation("Rejected {File} for {Name}: {Reason}", fileName, episode.Name, alignment.Reason);
-                continue;
+                break;
+            }
+        }
+
+        var best = measured
+            .Where(m => m.Candidate.Alignment!.IsAcceptable)
+            .OrderByDescending(m => Quality(m.Candidate))
+            .ThenBy(m => LanguageRank(m.Candidate.Languages))
+            .ThenByDescending(m => m.Candidate.NameMatch.Score)
+            .Select(m => (Item: m, Found: true))
+            .FirstOrDefault();
+
+        if (best.Found)
+        {
+            var (candidate, document, fileName) = best.Item;
+
+            if (measured.Count > 1)
+            {
+                logger.LogInformation(
+                    "Chose {File} for {Name} out of {Count} measured candidates.",
+                    fileName,
+                    episode.Name,
+                    measured.Count);
             }
 
-            var result = await ApplyAsync(episode, document, alignment, fileName, options, configuration, cancellationToken)
-                .ConfigureAwait(false);
+            var result = await ApplyAsync(
+                episode,
+                document,
+                candidate.Alignment!,
+                fileName,
+                options,
+                configuration,
+                cancellationToken).ConfigureAwait(false);
 
             result.Candidates = candidates;
             await RecordAsync(episode, result, cancellationToken).ConfigureAwait(false);
@@ -436,6 +479,31 @@ public sealed class JimakuSyncService(
         // episode filter is set, which silently hides season packs. Ask again without the filter.
         logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entry.Id);
         return await apiClient.GetFilesAsync(entry.Id, null, apiKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Scores how well a measured candidate fits, for choosing between several that all pass.
+    /// </summary>
+    /// <remarks>
+    /// Correlation is rounded before comparison so that differences well inside the measurement
+    /// noise do not decide the outcome; uniqueness then breaks the tie, since it is the measure
+    /// that says the alignment is unambiguous rather than merely strong.
+    /// </remarks>
+    private static double Quality(SubtitleCandidate candidate)
+    {
+        var alignment = candidate.Alignment;
+        if (alignment is null)
+        {
+            return double.NegativeInfinity;
+        }
+
+        var correlation = Math.Round(alignment.Correlation, 2);
+        var uniqueness = Math.Min(alignment.PeakRatio, 5.0) / 100.0;
+
+        // A file needing no correction is preferable to one needing a large one, all else equal.
+        var penalty = Math.Min(Math.Abs(alignment.Transform.OffsetSeconds), 30) / 10000.0;
+
+        return correlation + uniqueness - penalty;
     }
 
     /// <summary>Ranks candidates by how likely the file is to be usefully Japanese.</summary>

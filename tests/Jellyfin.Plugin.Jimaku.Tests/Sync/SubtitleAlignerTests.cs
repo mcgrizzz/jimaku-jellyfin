@@ -235,7 +235,7 @@ public class SmallCorrectionTests
         var truth = SyntheticTrack.Episode();
         var nudged = SyntheticTrack.Transform(truth, 1.0, -offset);
 
-        var result = new SubtitleAligner(new PluginConfiguration())
+        var result = new SubtitleAligner(new PluginConfiguration { MinCorrectionSeconds = 0.35 })
             .Align(Reference(truth), Document(nudged), false, false);
 
         Assert.Equal(SyncVerdict.Exact, result.Verdict);
@@ -244,6 +244,7 @@ public class SmallCorrectionTests
     }
 
     [Theory]
+    [InlineData(0.21)]
     [InlineData(0.5)]
     [InlineData(2.0)]
     public void Align_OffsetAboveTheThreshold_IsStillCorrected(double offset)
@@ -256,6 +257,20 @@ public class SmallCorrectionTests
 
         Assert.Equal(SyncVerdict.ConstantOffset, result.Verdict);
         Assert.Equal(offset, result.Transform.OffsetSeconds, 1);
+    }
+
+    [Fact]
+    public void Align_DefaultThreshold_AppliesAFifthOfASecond()
+    {
+        // A fifth of a second is visible on screen; the guard is for noise, not for real offsets.
+        var truth = SyntheticTrack.Episode();
+        var nudged = SyntheticTrack.Transform(truth, 1.0, -0.21);
+
+        var result = new SubtitleAligner(new PluginConfiguration())
+            .Align(Reference(truth), Document(nudged), false, false);
+
+        Assert.Equal(SyncVerdict.ConstantOffset, result.Verdict);
+        Assert.Equal(0.21, result.Transform.OffsetSeconds, 1);
     }
 
     [Fact]
