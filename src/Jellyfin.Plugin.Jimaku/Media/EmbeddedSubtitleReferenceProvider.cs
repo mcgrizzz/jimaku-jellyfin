@@ -118,7 +118,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         var language = string.IsNullOrEmpty(bestStream.Language) ? bestStream.Codec : bestStream.Language;
         var description = $"embedded {language} subtitles ({bestTrack.Count} cues)";
 
-        return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true);
+        return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true, bestTrack);
     }
 
     private static List<MediaStream> SelectStreams(MediaSourceInfo? source)

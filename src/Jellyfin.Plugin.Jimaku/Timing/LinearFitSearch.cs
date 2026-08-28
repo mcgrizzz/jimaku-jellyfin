@@ -88,10 +88,15 @@ public sealed class LinearFitSearch
     /// Every fit tested, best first. Empty when there was nothing to correlate. Returning all of
     /// them lets the caller see how close the runner-up was, which is itself a confidence signal.
     /// </returns>
+    /// <param name="onsets">
+    /// Compare only the moments cues begin, ignoring how long each stays on screen. Use when the
+    /// reference was binned the same way.
+    /// </param>
     public IReadOnlyList<LinearFit> Search(
         ActivitySignal reference,
         CueTrack probe,
-        IReadOnlyList<double>? scales = null)
+        IReadOnlyList<double>? scales = null,
+        bool onsets = false)
     {
         ArgumentNullException.ThrowIfNull(reference);
         ArgumentNullException.ThrowIfNull(probe);
@@ -119,11 +124,13 @@ public sealed class LinearFitSearch
         var results = new List<LinearFit>(candidateScales.Count);
         foreach (var scale in candidateScales)
         {
-            var probeSignal = ActivitySignal.FromCues(
-                probe,
-                totalSeconds: 0,
-                scale: scale,
-                maxCueSeconds: _options.MaxCueSeconds);
+            var probeSignal = onsets
+                ? ActivitySignal.FromCueStarts(probe, totalSeconds: 0, scale: scale)
+                : ActivitySignal.FromCues(
+                    probe,
+                    totalSeconds: 0,
+                    scale: scale,
+                    maxCueSeconds: _options.MaxCueSeconds);
 
             if (probeSignal.Length > correlator.Size)
             {

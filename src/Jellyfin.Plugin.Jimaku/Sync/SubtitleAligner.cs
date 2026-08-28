@@ -52,6 +52,26 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         });
 
         var fits = search.Search(reference.Signal, probe);
+
+        // Also compare cue starts alone. Overlap scoring rewards matching durations as well as
+        // timings, so a subtitle that marks the same moments but splits lines differently scores
+        // poorly despite being correct - a Blu-ray release measured against a streaming track, say.
+        // Onsets ignore how lines are divided and compare only when each one begins.
+        var representation = "cue overlap";
+        if (reference.Cues is { Count: > 0 } referenceCues)
+        {
+            var onsetFits = search.Search(
+                ActivitySignal.FromCueStarts(referenceCues, reference.Signal.DurationSeconds),
+                probe,
+                onsets: true);
+
+            if (onsetFits.Count > 0 && (fits.Count == 0 || Better(onsetFits[0], fits[0])))
+            {
+                fits = onsetFits;
+                representation = "cue starts";
+            }
+        }
+
         if (fits.Count == 0)
         {
             return AlignmentResult.Decline("The alignment search produced no result.", reference.Source);
@@ -63,7 +83,7 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             Transform = best.Transform,
             Correlation = best.Correlation,
             PeakRatio = best.PeakRatio,
-            ReferenceSource = reference.Source,
+            ReferenceSource = $"{reference.Source}, matched on {representation}",
         };
 
         var globalIsGood = best.Correlation >= configuration.MinCorrelation
@@ -148,6 +168,22 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             CultureInfo.InvariantCulture,
             $"Constant offset of {best.OffsetSeconds:+0.000;-0.000}s.");
         return result;
+    }
+
+    /// <summary>
+    /// Whether one fit is a better description of the same pair than another. Uniqueness carries
+    /// the comparison once correlation is close, because it is the measure that says the alignment
+    /// is unambiguous rather than merely strong.
+    /// </summary>
+    private static bool Better(LinearFit candidate, LinearFit incumbent)
+    {
+        var correlationGain = candidate.Correlation - incumbent.Correlation;
+        if (Math.Abs(correlationGain) > 0.05)
+        {
+            return correlationGain > 0;
+        }
+
+        return candidate.PeakRatio > incumbent.PeakRatio;
     }
 
     /// <summary>

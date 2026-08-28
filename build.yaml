@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 9
+version: 10
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,8 +16,7 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Never pick a bilingual subtitle over a Japanese-only one. Language now outranks a fractional
-    difference in correlation.
-  - Discount an offset shared by most candidates: it belongs to the reference track, not to the
-    subtitles, and applying it shifted well-timed files out of sync.
-  - Let any measured candidate be applied by hand, including one that failed verification.
+  - Compare when cues start, not just how long they stay on screen. Subtitles that mark the same
+    moments but split lines differently were scored as mismatches and wrongly declined.
+  - Fix shared-offset detection, which ignored declined candidates and so never had enough
+    measurements to reach a consensus.

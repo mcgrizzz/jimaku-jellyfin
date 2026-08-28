@@ -11,4 +11,12 @@ namespace Jellyfin.Plugin.Jimaku.Media;
 /// trustworthy than voice activity analysis, and the user should be able to see which was used.
 /// </param>
 /// <param name="IsFromSubtitles">Whether it came from an embedded subtitle track.</param>
-public readonly record struct ReferenceTrack(ActivitySignal Signal, string Source, bool IsFromSubtitles);
+/// <param name="Cues">
+/// The underlying cues, when the reference came from a subtitle track. Needed to compare cue starts
+/// alone, which voice-activity references cannot offer since they have no cue structure.
+/// </param>
+public readonly record struct ReferenceTrack(
+    ActivitySignal Signal,
+    string Source,
+    bool IsFromSubtitles,
+    CueTrack? Cues = null);

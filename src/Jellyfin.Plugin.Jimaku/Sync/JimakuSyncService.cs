@@ -504,8 +504,13 @@ public sealed class JimakuSyncService(
         IReadOnlyList<SubtitleCandidate> candidates,
         PluginConfiguration configuration)
     {
+        // Every measurement votes, including candidates that failed verification. A declined
+        // candidate still measured an offset, and it is precisely those corroborating measurements
+        // that reveal the shared component: restricting the vote to accepted candidates threw away
+        // four of the seven observations and left too few to reach a consensus.
         var offsets = candidates
-            .Where(c => c.Alignment is { Verdict: SyncVerdict.ConstantOffset or SyncVerdict.Exact })
+            .Where(c => c.Alignment is not null)
+            .Where(c => c.Alignment!.Transform.IsShiftOnly || c.Alignment.Verdict == SyncVerdict.Declined)
             .Select(c => c.Alignment!.Transform.OffsetSeconds)
             .ToList();
 

@@ -144,6 +144,52 @@ public sealed class ActivitySignal
     }
 
     /// <summary>
+    /// Bins only the moments cues begin, as short pulses.
+    /// </summary>
+    /// <remarks>
+    /// Presence binning scores how long each cue stays on screen as well as when it starts, so two
+    /// subtitles that mark the same moments but split lines differently correlate poorly even when
+    /// perfectly timed. Different groups routinely disagree about whether a long exchange is one
+    /// cue or three. Reducing each cue to a pulse at its start compares the timing and ignores the
+    /// segmentation, which is the part that actually has to match.
+    /// </remarks>
+    /// <param name="track">The cues to bin.</param>
+    /// <param name="totalSeconds">Length of the signal; the track's own extent when not positive.</param>
+    /// <param name="scale">Linear time scale applied before binning.</param>
+    /// <param name="pulseSeconds">Width of the pulse placed at each cue start.</param>
+    /// <returns>The binned onset signal.</returns>
+    public static ActivitySignal FromCueStarts(
+        CueTrack track,
+        double totalSeconds = 0,
+        double scale = 1.0,
+        double pulseSeconds = 0.20)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+
+        var span = totalSeconds > 0 ? totalSeconds : track.LastEndSeconds * scale;
+        var length = (int)Math.Ceiling(span * BinsPerSecond) + 2;
+        if (length < 2)
+        {
+            return new ActivitySignal(new double[2]);
+        }
+
+        var bins = new double[length];
+        var pulse = Math.Max(1, (int)Math.Round(pulseSeconds * BinsPerSecond));
+
+        foreach (var cue in track.Cues)
+        {
+            var startBin = (int)Math.Round(cue.StartSeconds * scale * BinsPerSecond);
+            var endBin = Math.Min(startBin + pulse, length);
+            for (var i = Math.Max(0, startBin); i < endBin; i++)
+            {
+                bins[i] = 1.0;
+            }
+        }
+
+        return new ActivitySignal(bins);
+    }
+
+    /// <summary>
     /// Builds a signal from per-frame speech probabilities emitted at an arbitrary rate, resampling
     /// onto the 10 ms grid and thresholding.
     /// </summary>
