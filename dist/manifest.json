@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.1.0",
-                "changelog": "- Fix a dependency cycle that stopped the server starting after installation.",
+                "version": "1.0.2.0",
+                "changelog": "- Fix the episode picker: search now finds a series and lists its episodes, instead of\n  matching the search text against episode titles and missing almost everything.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.1.0.zip",
-                "checksum": "31be1e4a7c7b2f026e9033701b30f7e0",
-                "timestamp": "2026-08-28T17:48:36Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.2.0.zip",
+                "checksum": "ff186a11c976d70236f1b10126056fd5",
+                "timestamp": "2026-08-28T18:27:19Z"
             }
         ]
     }

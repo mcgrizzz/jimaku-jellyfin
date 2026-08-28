@@ -75,35 +75,91 @@ function testKey(view) {
     });
 }
 
-function searchEpisodes(view, term) {
+// Searching Episodes by SearchTerm matches the episode's own title, not the series, so a series
+// name finds only the handful of episodes that happen to repeat it in their titles. Find the
+// series first, then list its episodes.
+function searchSeries(view, term) {
     const container = view.querySelector('#EpisodeResults');
-    if (!term || term.length < 3) {
+    if (!term || term.length < 2) {
         container.innerHTML = '';
         return;
     }
 
     ApiClient.getItems(ApiClient.getCurrentUserId(), {
         SearchTerm: term,
-        IncludeItemTypes: 'Episode',
+        IncludeItemTypes: 'Series',
         Recursive: true,
-        Limit: 15,
-        Fields: 'Path,ParentId'
+        Limit: 20,
+        SortBy: 'SortName'
     }).then(result => {
         if (!result.Items.length) {
-            container.innerHTML = '<p class="fieldDescription">No episodes matched.</p>';
+            container.innerHTML = '<p class="fieldDescription">No series matched.</p>';
             return;
         }
 
-        container.innerHTML = result.Items.map(item => {
-            const label = `${escapeHtml(item.SeriesName || '')} S${item.ParentIndexNumber ?? '?'}E${item.IndexNumber ?? '?'} — ${escapeHtml(item.Name)}`;
-            return `<div style="display:flex;gap:0.5em;align-items:center;margin:0.35em 0;flex-wrap:wrap;">
-                <span style="flex:1 1 20em;">${label}</span>
+        container.innerHTML = '<div class="fieldDescription">Select a series:</div>' +
+            result.Items.map(item => {
+                const year = item.ProductionYear ? ` (${item.ProductionYear})` : '';
+                return `<div style="margin:0.35em 0;">
+                    <button is="emby-button" type="button" class="raised block jimaku-series"
+                            data-id="${item.Id}" data-name="${escapeHtml(item.Name)}">
+                        <span>${escapeHtml(item.Name)}${year}</span>
+                    </button></div>`;
+            }).join('');
+    });
+}
+
+function loadEpisodes(view, seriesId, seriesName) {
+    const container = view.querySelector('#EpisodeResults');
+    container.innerHTML = '<p class="fieldDescription">Loading episodes…</p>';
+
+    ApiClient.getItems(ApiClient.getCurrentUserId(), {
+        ParentId: seriesId,
+        IncludeItemTypes: 'Episode',
+        Recursive: true,
+        Limit: 2000,
+        Fields: 'MediaStreams',
+        SortBy: 'ParentIndexNumber,IndexNumber',
+        SortOrder: 'Ascending'
+    }).then(result => {
+        if (!result.Items.length) {
+            container.innerHTML = '<p class="fieldDescription">That series has no episodes.</p>';
+            return;
+        }
+
+        let html = `<div style="margin-bottom:0.5em;">
+            <button is="emby-button" type="button" class="raised jimaku-back"><span>&larr; Back to search</span></button>
+            <strong style="margin-left:0.75em;">${escapeHtml(seriesName)}</strong></div>`;
+
+        let season = null;
+        for (const item of result.Items) {
+            if (item.ParentIndexNumber !== season) {
+                season = item.ParentIndexNumber;
+                html += `<div style="margin:0.75em 0 0.25em;font-weight:600;">Season ${season ?? '?'}</div>`;
+            }
+
+            // Flag episodes that already have Japanese subtitles, so it is obvious which ones
+            // are worth acting on.
+            const hasJapanese = (item.MediaStreams || []).some(st =>
+                st.Type === 'Subtitle' && (st.Language === 'jpn' || st.Language === 'ja'));
+
+            const code = `S${String(item.ParentIndexNumber ?? 0).padStart(2, '0')}E${String(item.IndexNumber ?? 0).padStart(2, '0')}`;
+            const mark = hasJapanese
+                ? '<span title="already has a Japanese subtitle track" style="opacity:0.7;">[JA]</span> '
+                : '';
+
+            html += `<div style="display:flex;gap:0.5em;align-items:center;margin:0.2em 0;flex-wrap:wrap;">
+                <span style="flex:1 1 20em;">${mark}<code>${code}</code> ${escapeHtml(item.Name || '')}</span>
                 <button is="emby-button" type="button" class="raised jimaku-auto" data-id="${item.Id}">
                     <span>Fetch best</span></button>
                 <button is="emby-button" type="button" class="raised jimaku-list" data-id="${item.Id}">
                     <span>Show candidates</span></button>
             </div>`;
-        }).join('');
+        }
+
+        container.innerHTML = html;
+    }).catch(err => {
+        container.innerHTML = '<p class="fieldDescription">Could not load episodes: ' + escapeHtml(err) + '</p>';
     });
 }
 
@@ -231,11 +287,17 @@ export default function (view) {
     view.querySelector('#EpisodeSearch').addEventListener('input', function (e) {
         clearTimeout(searchTimer);
         const term = e.target.value.trim();
-        searchTimer = setTimeout(() => searchEpisodes(view, term), 350);
+        searchTimer = setTimeout(() => searchSeries(view, term), 350);
     });
 
     // Delegated, because the result rows are rebuilt on every search.
     view.addEventListener('click', function (e) {
+        const series = e.target.closest('.jimaku-series');
+        if (series) { loadEpisodes(view, series.dataset.id, series.dataset.name); return; }
+
+        const back = e.target.closest('.jimaku-back');
+        if (back) { searchSeries(view, view.querySelector('#EpisodeSearch').value.trim()); return; }
+
         const auto = e.target.closest('.jimaku-auto');
         if (auto) { runAuto(view, auto.dataset.id); return; }
 
