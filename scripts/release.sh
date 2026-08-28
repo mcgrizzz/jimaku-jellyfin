@@ -12,7 +12,7 @@ GITHUB_USER="mcgrizzz"
 GITHUB_REPO="jimaku-jellyfin"
 BRANCH="main"
 
-RAW="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${BRANCH}/dist"
+RAW="https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${BRANCH}/dist"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -37,4 +37,7 @@ jprm repo add ./dist/manifest.json "dist/${ZIP}" -U "${RAW}/${ZIP}"
 
 echo
 echo "Done. dist/${ZIP} and dist/manifest.json are ready."
-echo "Commit and push dist/, then Jellyfin will offer version ${VERSION}."
+echo "Now:  git add dist && git commit -m \"Release ${VERSION}\" && git push"
+echo
+echo "Then purge the CDN, or the new version stays invisible for up to 12 hours:"
+echo "  scripts/purge-cdn.sh"

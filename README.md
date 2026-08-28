@@ -85,7 +85,7 @@ dotnet test
 In Jellyfin: **Dashboard → Plugins → Repositories → +**, and add
 
 ```
-https://raw.githubusercontent.com/mcgrizzz/jimaku-jellyfin/main/dist/manifest.json
+https://cdn.jsdelivr.net/gh/mcgrizzz/jimaku-jellyfin@main/dist/manifest.json
 ```
 
 Then **Catalogue → Subtitles → Jimaku → Install**, and restart the server. Updates from then on are

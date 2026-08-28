@@ -11,7 +11,7 @@
                 "version": "1.0.0.0",
                 "changelog": "- Initial release.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://raw.githubusercontent.com/mcgrizzz/jimaku-jellyfin/main/dist/jimaku_1.0.0.0.zip",
+                "sourceUrl": "https://cdn.jsdelivr.net/gh/mcgrizzz/jimaku-jellyfin@main/dist/jimaku_1.0.0.0.zip",
                 "checksum": "da3c20ba420a7e78562fe19e2aea0cd4",
                 "timestamp": "2026-08-28T17:18:13Z"
             }
