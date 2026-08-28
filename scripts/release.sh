@@ -12,7 +12,7 @@ GITHUB_USER="mcgrizzz"
 GITHUB_REPO="jimaku-jellyfin"
 BRANCH="main"
 
-RAW="https://cdn.jsdelivr.net/gh/${GITHUB_USER}/${GITHUB_REPO}@${BRANCH}/dist"
+RAW="https://${GITHUB_USER}.github.io/${GITHUB_REPO}/dist"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -39,5 +39,5 @@ echo
 echo "Done. dist/${ZIP} and dist/manifest.json are ready."
 echo "Now:  git add dist && git commit -m \"Release ${VERSION}\" && git push"
 echo
-echo "Then purge the CDN, or the new version stays invisible for up to 12 hours:"
-echo "  scripts/purge-cdn.sh"
+echo "GitHub Pages republishes within a minute or so of the push, and Jellyfin"
+echo "picks the new version up on its next repository refresh."
