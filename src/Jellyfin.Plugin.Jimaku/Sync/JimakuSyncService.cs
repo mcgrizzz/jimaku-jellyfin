@@ -99,12 +99,18 @@ public sealed class JimakuSyncService(
                     File = filtered.File,
                     Rejection = filtered.Rejection,
                     NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),
+                    Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
                 });
             }
         }
 
+        // A bilingual release puts Chinese on the styled, prominent line with Japanese underneath,
+        // which is a poor result for someone asking for Japanese subtitles. The same groups almost
+        // always publish a Japanese-only file beside it, so rank that first - but keep the
+        // bilingual one available, since it still beats nothing.
         return candidates
             .OrderByDescending(c => c.IsUsable)
+            .ThenBy(c => LanguageRank(c.Languages))
             .ThenByDescending(c => c.NameMatch.Score)
             .ThenBy(c => c.File.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -431,6 +437,15 @@ public sealed class JimakuSyncService(
         logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entry.Id);
         return await apiClient.GetFilesAsync(entry.Id, null, apiKey, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>Ranks candidates by how likely the file is to be usefully Japanese.</summary>
+    private static int LanguageRank(SubtitleLanguages languages) => languages switch
+    {
+        SubtitleLanguages.JapaneseOnly => 0,
+        SubtitleLanguages.Unknown => 1,
+        SubtitleLanguages.Multilingual => 2,
+        _ => 3,
+    };
 
     private static string BuildDeclineMessage(List<SubtitleCandidate> usable, ReferenceTrack? reference)
     {

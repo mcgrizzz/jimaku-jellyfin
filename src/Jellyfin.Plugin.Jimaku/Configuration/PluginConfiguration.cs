@@ -58,6 +58,20 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets how far the alignment search looks for a peak, in seconds.</summary>
     public double MaxSearchOffsetSeconds { get; set; } = 60;
 
+    /// <summary>
+    /// Gets or sets the smallest correction worth applying, in seconds. Anything smaller is treated
+    /// as already in sync and the file is written unchanged.
+    /// </summary>
+    /// <remarks>
+    /// A measured offset of a couple of hundred milliseconds says less about the subtitle than it
+    /// does about the reference. Embedded tracks are authored with their own lead-in, so aligning
+    /// to one inherits its timing habits, and a subtitle that was already well matched to the audio
+    /// can be nudged out of sync by "correcting" it. Subtitles also conventionally appear slightly
+    /// before speech, so an erroneous positive shift is the most noticeable kind. Below this
+    /// threshold, leaving the file alone is the safer bet.
+    /// </remarks>
+    public double MinCorrectionSeconds { get; set; } = 0.35;
+
     /// <summary>Gets or sets a value indicating whether framerate ratios are tested.</summary>
     public bool EnableFramerateCorrection { get; set; } = true;
 

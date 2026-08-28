@@ -8,6 +8,7 @@ const FIELDS = {
     ],
     number: [
         'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
+        'MinCorrectionSeconds',
         'RetryDeclinedAfterDays', 'KaraokePolicy'
     ],
     text: ['ApiKey', 'LanguageTag', 'SileroModelPath']

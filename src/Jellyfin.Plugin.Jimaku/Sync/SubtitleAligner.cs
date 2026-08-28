@@ -131,12 +131,15 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             return result;
         }
 
-        // Under half a bin is indistinguishable from zero, and rewriting achieves nothing.
-        if (Math.Abs(best.OffsetSeconds) < 0.05)
+        // Corrections smaller than the reference's own timing uncertainty are not worth making:
+        // applying one can easily push a well-timed subtitle out of sync rather than into it.
+        if (Math.Abs(best.OffsetSeconds) < configuration.MinCorrectionSeconds)
         {
             result.Verdict = SyncVerdict.Exact;
             result.Transform = TimingTransform.Identity;
-            result.Reason = "Already in sync.";
+            result.Reason = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Already in sync; the measured difference of {best.OffsetSeconds:+0.000;-0.000}s is below the {configuration.MinCorrectionSeconds:0.00}s worth correcting.");
             return result;
         }
 

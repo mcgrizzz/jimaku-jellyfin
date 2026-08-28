@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 6
+version: 7
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,8 +16,7 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Stop discarding candidates on filename score. A subtitle whose name shares nothing with
-    your file is often the one that matches, and the old threshold skipped it entirely.
-  - Choose the embedded subtitle track with the most cues as the timing reference, instead of
-    the first one by language. A signs-only track made every candidate look untrustworthy.
-  - Show the measured correlation, uniqueness and correction for each candidate checked.
+  - Prefer Japanese-only subtitles over Chinese/Japanese bilingual releases, which style the
+    Chinese as the prominent line. Chinese-only files are now rejected outright.
+  - Stop applying corrections below 0.35s. A small measured offset usually reflects the
+    reference track's own lead-in, and shifting a well-timed subtitle made it worse.

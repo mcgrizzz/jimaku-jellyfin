@@ -197,3 +197,77 @@ public class SubtitleAlignerTests(ITestOutputHelper output)
         Assert.True(result.IsAcceptable);
     }
 }
+
+/// <summary>
+/// A measured offset of a couple of hundred milliseconds says more about the reference track's
+/// lead-in than about the subtitle. Applying it can push a well-timed file out of sync, which is
+/// exactly what happened to a user on a +0.21s "correction".
+/// </summary>
+public class SmallCorrectionTests
+{
+    private const double EpisodeSeconds = 1440;
+
+    private static ReferenceTrack Reference(CueTrack track) =>
+        new(ActivitySignal.FromCues(track, EpisodeSeconds), "test reference", true);
+
+    private static SubtitleDocument Document(CueTrack track)
+    {
+        var lines = new List<string>
+        {
+            "[Script Info]\n", "ScriptType: v4.00+\n", "\n", "[Events]\n",
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+        };
+
+        foreach (var cue in track.Cues)
+        {
+            lines.Add($"Dialogue: 0,{SubtitleRewriter.FormatTime(SubtitleFormatKind.Ass, cue.StartSeconds)},{SubtitleRewriter.FormatTime(SubtitleFormatKind.Ass, cue.EndSeconds)},Default,,0,0,0,,line\n");
+        }
+
+        return SubtitleDocument.Parse(string.Concat(lines));
+    }
+
+    [Theory]
+    [InlineData(0.21)]
+    [InlineData(-0.21)]
+    [InlineData(0.30)]
+    public void Align_OffsetBelowTheThreshold_IsLeftAlone(double offset)
+    {
+        var truth = SyntheticTrack.Episode();
+        var nudged = SyntheticTrack.Transform(truth, 1.0, -offset);
+
+        var result = new SubtitleAligner(new PluginConfiguration())
+            .Align(Reference(truth), Document(nudged), false, false);
+
+        Assert.Equal(SyncVerdict.Exact, result.Verdict);
+        Assert.True(result.Transform.IsIdentity, "a sub-threshold offset must not be applied");
+        Assert.Contains("below the", result.Reason, System.StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(2.0)]
+    public void Align_OffsetAboveTheThreshold_IsStillCorrected(double offset)
+    {
+        var truth = SyntheticTrack.Episode();
+        var shifted = SyntheticTrack.Transform(truth, 1.0, -offset);
+
+        var result = new SubtitleAligner(new PluginConfiguration())
+            .Align(Reference(truth), Document(shifted), false, false);
+
+        Assert.Equal(SyncVerdict.ConstantOffset, result.Verdict);
+        Assert.Equal(offset, result.Transform.OffsetSeconds, 1);
+    }
+
+    [Fact]
+    public void Align_ThresholdIsConfigurable()
+    {
+        var configuration = new PluginConfiguration { MinCorrectionSeconds = 0.05 };
+        var truth = SyntheticTrack.Episode();
+        var nudged = SyntheticTrack.Transform(truth, 1.0, -0.21);
+
+        var result = new SubtitleAligner(configuration)
+            .Align(Reference(truth), Document(nudged), false, false);
+
+        Assert.Equal(SyncVerdict.ConstantOffset, result.Verdict);
+    }
+}

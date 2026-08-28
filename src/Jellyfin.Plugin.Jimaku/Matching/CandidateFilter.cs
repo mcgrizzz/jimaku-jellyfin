@@ -30,6 +30,9 @@ public enum RejectionReason
 
     /// <summary>Too small to be a real subtitle file.</summary>
     TooSmall,
+
+    /// <summary>The filename indicates the file contains no Japanese.</summary>
+    NoJapanese,
 }
 
 /// <summary>A Jimaku file with the outcome of filtering.</summary>
@@ -51,6 +54,7 @@ public readonly record struct FilteredCandidate(JimakuFile File, RejectionReason
         RejectionReason.ArchivesDisabled => "archive downloads are disabled",
         RejectionReason.MachineTranslated => "machine-generated subtitles",
         RejectionReason.TooSmall => "file is too small to be a real subtitle",
+        RejectionReason.NoJapanese => "does not appear to contain Japanese",
         _ => "rejected",
     };
 }
@@ -125,6 +129,12 @@ public static partial class CandidateFilter
         if (MachineTranslatedPattern().IsMatch(file.Name))
         {
             return RejectionReason.MachineTranslated;
+        }
+
+        // A Chinese-only release cannot help, whatever its timing.
+        if (SubtitleLanguageHint.Classify(file.Name) == SubtitleLanguages.NoJapanese)
+        {
+            return RejectionReason.NoJapanese;
         }
 
         var extension = Path.GetExtension(file.Name);

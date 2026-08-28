@@ -32,6 +32,9 @@ public sealed class SubtitleCandidate
     /// <summary>Gets or sets the filename match against the local video.</summary>
     public NameMatch NameMatch { get; set; }
 
+    /// <summary>Gets or sets what the filename suggests about the languages inside.</summary>
+    public SubtitleLanguages Languages { get; set; }
+
     /// <summary>
     /// Gets or sets the timing verdict, populated only once the file has actually been downloaded
     /// and analysed. Listing candidates deliberately skips this so the UI stays responsive.

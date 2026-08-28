@@ -88,6 +88,16 @@
           </div>
 
           <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinCorrectionSeconds" step="0.05" min="0"
+                   label="Smallest correction worth applying (seconds)" />
+            <div class="fieldDescription">
+              Below this, the subtitle is written unchanged. A small measured offset often reflects
+              the embedded reference track's own lead-in rather than a fault in the subtitle, and
+              "correcting" it can push a well-timed file out of sync.
+            </div>
+          </div>
+
+          <div class="inputContainer">
             <input is="emby-input" type="number" id="MaxOffsetSeconds" step="1" min="0"
                    label="Largest correction to apply (seconds)" />
             <div class="fieldDescription">
