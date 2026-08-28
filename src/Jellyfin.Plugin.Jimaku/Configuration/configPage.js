@@ -163,6 +163,24 @@ function loadEpisodes(view, seriesId, seriesName) {
     });
 }
 
+// ApiClient.ajax rejects with a fetch Response, which stringifies to "[object Response]" and
+// tells the user nothing. Pull the server's actual message out of the body.
+function describeError(err) {
+    if (err && typeof err.text === 'function') {
+        return err.text()
+            .then(body => `${err.status || ''} ${body || err.statusText || 'request failed'}`.trim())
+            .catch(() => `${err.status || ''} ${err.statusText || 'request failed'}`.trim());
+    }
+    return Promise.resolve(String(err && err.message ? err.message : err));
+}
+
+function showError(view, err) {
+    describeError(err).then(text => {
+        view.querySelector('#ActionStatus').innerHTML =
+            '<strong>Failed</strong><div>' + escapeHtml(text) + '</div>';
+    });
+}
+
 function renderResult(view, result) {
     const status = view.querySelector('#ActionStatus');
     const verdictText = {
@@ -232,7 +250,7 @@ function runAuto(view, itemId) {
         url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Auto`),
         dataType: 'json'
     }).then(result => renderResult(view, result))
-      .catch(err => { status.textContent = 'Failed: ' + err; });
+      .catch(err => showError(view, err));
 }
 
 function listCandidates(view, itemId) {
@@ -246,7 +264,7 @@ function listCandidates(view, itemId) {
     }).then(candidates => {
         status.textContent = `${candidates.length} file(s) found.`;
         renderCandidates(view, candidates, itemId);
-    }).catch(err => { status.textContent = 'Failed: ' + err; });
+    }).catch(err => showError(view, err));
 }
 
 function applyCandidate(view, button) {
@@ -264,7 +282,7 @@ function applyCandidate(view, button) {
         contentType: 'application/json',
         dataType: 'json'
     }).then(result => renderResult(view, result))
-      .catch(err => { status.textContent = 'Failed: ' + err; });
+      .catch(err => showError(view, err));
 }
 
 export default function (view) {

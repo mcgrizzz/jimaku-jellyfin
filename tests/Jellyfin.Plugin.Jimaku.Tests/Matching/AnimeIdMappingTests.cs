@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Jellyfin.Plugin.Jimaku.Matching;
 using Xunit;
 
@@ -14,7 +16,7 @@ public class AnimeIdMappingTests
     {
         TvdbId = tvdbId,
         TvdbSeason = season,
-        TvdbEpisodeOffset = offset,
+        TvdbEpisodeOffsetRaw = offset,
         AniListId = aniListId,
     };
 
@@ -74,5 +76,102 @@ public class AnimeIdMappingTests
     public void Select_EmptyTable_ReturnsNothing()
     {
         Assert.Null(AnimeIdResolver.SelectFromTvdbMappings([], 1, 1));
+    }
+}
+
+/// <summary>
+/// The Kometa anime ID table is community-maintained and not schema validated. A strict
+/// deserializer once threw on a single oddly typed field and lost all 16,000 mappings, surfacing
+/// to the user as a failed request.
+/// </summary>
+public class KometaMappingParsingTests
+{
+    private static readonly System.Text.Json.JsonSerializerOptions Options = new();
+
+    private static System.Collections.Generic.Dictionary<string, AnimeIdMapping>? Parse(string json) =>
+        System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.Dictionary<string, AnimeIdMapping>>(json, Options);
+
+    [Fact]
+    public void Parse_EntryWithCommaSeparatedMalId_DoesNotThrow()
+    {
+        // Verbatim from the live table, entry 6367 - the one that broke the plugin in 1.0.2.0.
+        const string Json = """
+        {
+          "1":    {"tvdb_id": 72025, "tvdb_season": 1, "tvdb_epoffset": 0, "mal_id": 290, "anilist_id": 290},
+          "6367": {"tvdb_id": 79414, "tvdb_season": 1, "tvdb_epoffset": 0, "anilist_id": 4382, "mal_id": "849,4382"}
+        }
+        """;
+
+        var parsed = Parse(Json);
+
+        Assert.NotNull(parsed);
+        Assert.Equal(2, parsed!.Count);
+        Assert.Equal(290, parsed["1"].AniListId);
+        Assert.Equal(4382, parsed["6367"].AniListId);
+        Assert.Equal(79414, parsed["6367"].TvdbId);
+    }
+
+    [Theory]
+    [InlineData("""{"a":{"anilist_id": 123}}""", 123)]
+    [InlineData("""{"a":{"anilist_id": "123"}}""", 123)]
+    [InlineData("""{"a":{"anilist_id": "123,456"}}""", 123)]
+    [InlineData("""{"a":{"anilist_id": null}}""", null)]
+    [InlineData("""{"a":{"anilist_id": ""}}""", null)]
+    [InlineData("""{"a":{"anilist_id": "not a number"}}""", null)]
+    [InlineData("""{"a":{}}""", null)]
+    public void Parse_ToleratesEveryShapeTheFieldHasTakenOrCouldTake(string json, int? expected)
+    {
+        Assert.Equal(expected, Parse(json)!["a"].AniListId);
+    }
+
+    [Fact]
+    public void Parse_MissingEpisodeOffset_DefaultsToZero()
+    {
+        Assert.Equal(0, Parse("""{"a":{"anilist_id": 1}}""")!["a"].TvdbEpisodeOffset);
+    }
+
+    [Fact]
+    public void Parse_UnexpectedFieldTypes_AreIgnoredRatherThanFatal()
+    {
+        // An object or array where a number was expected must not take the whole table down.
+        var parsed = Parse("""{"a":{"anilist_id": {"nested": 1}, "tvdb_id": [1,2]}}""");
+
+        Assert.NotNull(parsed);
+        Assert.Null(parsed!["a"].AniListId);
+        Assert.Null(parsed["a"].TvdbId);
+    }
+}
+
+/// <summary>
+/// Parses the live Kometa table when a local copy is available. Gated on an environment variable
+/// so CI without network still passes, but it is the only check that covers the whole real file
+/// rather than the handful of shapes I thought to write down.
+/// </summary>
+[Trait("Category", "Live")]
+public class KometaLiveTableTests(Xunit.Abstractions.ITestOutputHelper output)
+{
+    [Fact]
+    public void Parse_TheEntireLiveTable_Succeeds()
+    {
+        var path = Environment.GetEnvironmentVariable("KOMETA_ANIME_IDS");
+        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path))
+        {
+            output.WriteLine("Set KOMETA_ANIME_IDS to a copy of anime_ids.json to run this.");
+            return;
+        }
+
+        var parsed = System.Text.Json.JsonSerializer
+            .Deserialize<System.Collections.Generic.Dictionary<string, AnimeIdMapping>>(
+                System.IO.File.ReadAllText(path),
+                new System.Text.Json.JsonSerializerOptions());
+
+        Assert.NotNull(parsed);
+        var withAniList = parsed!.Values.Count(v => v.AniListId.HasValue);
+        var withTvdb = parsed.Values.Count(v => v.TvdbId.HasValue);
+
+        output.WriteLine($"parsed {parsed.Count} entries; {withAniList} with an AniList ID, {withTvdb} with a TVDB ID");
+
+        Assert.True(parsed.Count > 10000, $"only {parsed.Count} entries parsed");
+        Assert.True(withAniList > 10000, $"only {withAniList} AniList IDs");
     }
 }

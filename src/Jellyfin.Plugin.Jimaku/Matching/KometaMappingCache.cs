@@ -21,6 +21,7 @@ public sealed class AnimeIdMapping
 
     /// <summary>Gets or sets the TVDB series ID.</summary>
     [JsonPropertyName("tvdb_id")]
+    [JsonConverter(typeof(LenientInt32Converter))]
     public int? TvdbId { get; set; }
 
     /// <summary>
@@ -28,6 +29,7 @@ public sealed class AnimeIdMapping
     /// absolutely rather than by season, and <c>0</c> means specials.
     /// </summary>
     [JsonPropertyName("tvdb_season")]
+    [JsonConverter(typeof(LenientInt32Converter))]
     public int? TvdbSeason { get; set; }
 
     /// <summary>
@@ -39,14 +41,16 @@ public sealed class AnimeIdMapping
     /// that conversion is a subtle way to request the wrong episode's subtitles.
     /// </remarks>
     [JsonPropertyName("tvdb_epoffset")]
-    public int TvdbEpisodeOffset { get; set; }
+    [JsonConverter(typeof(LenientInt32Converter))]
+    public int? TvdbEpisodeOffsetRaw { get; set; }
 
-    /// <summary>Gets or sets the MyAnimeList ID.</summary>
-    [JsonPropertyName("mal_id")]
-    public int? MalId { get; set; }
+    /// <summary>Gets the episode offset, treating a missing or unparseable value as zero.</summary>
+    [JsonIgnore]
+    public int TvdbEpisodeOffset => TvdbEpisodeOffsetRaw ?? 0;
 
     /// <summary>Gets or sets the AniList ID, which is what Jimaku indexes by.</summary>
     [JsonPropertyName("anilist_id")]
+    [JsonConverter(typeof(LenientInt32Converter))]
     public int? AniListId { get; set; }
 }
 
@@ -129,7 +133,30 @@ public sealed class KometaMappingCache(HttpClient httpClient, ILogger<KometaMapp
                 return;
             }
 
-            Parse(json);
+            try
+            {
+                Parse(json);
+            }
+            catch (JsonException ex)
+            {
+                // Third-party data, regenerated daily and not schema validated. Losing ID mapping
+                // degrades the plugin to name search; throwing would fail the user's request.
+                logger.LogError(ex, "The anime ID table could not be parsed; ID mapping is unavailable.");
+
+                // Drop the cached copy so the next attempt re-downloads rather than re-reading it.
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+                }
+                catch (IOException)
+                {
+                    // Nothing more to do.
+                }
+            }
+
             _loadedAt = DateTimeOffset.UtcNow;
         }
         finally

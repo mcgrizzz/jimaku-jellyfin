@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.2.0",
-                "changelog": "- Fix the episode picker: search now finds a series and lists its episodes, instead of\n  matching the search text against episode titles and missing almost everything.",
+                "version": "1.0.3.0",
+                "changelog": "- Fix a crash resolving anime IDs: six entries in the community ID table type a field as a\n  string, which aborted the whole table and failed the request.\n- Show the server's actual error message instead of \"[object Response]\".",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.2.0.zip",
-                "checksum": "ff186a11c976d70236f1b10126056fd5",
-                "timestamp": "2026-08-28T18:27:19Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.3.0.zip",
+                "checksum": "61be82193b51316c620ae4ffa7ff8453",
+                "timestamp": "2026-08-28T18:34:02Z"
             }
         ]
     }

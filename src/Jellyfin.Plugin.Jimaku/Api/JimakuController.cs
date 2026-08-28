@@ -63,6 +63,11 @@ public class JimakuController(
             logger.LogWarning(ex, "Listing Jimaku candidates for {Name} failed.", episode.Name);
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
         }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected failure listing candidates for {Name}.", episode.Name);
+            return StatusCode(StatusCodes.Status500InternalServerError, $"{ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -103,6 +108,12 @@ public class JimakuController(
         {
             logger.LogWarning(ex, "Syncing {Name} failed.", episode.Name);
             return StatusCode(StatusCodes.Status502BadGateway, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // The settings page shows this text, so a readable sentence beats a stack trace.
+            logger.LogError(ex, "Unexpected failure syncing {Name}.", episode.Name);
+            return StatusCode(StatusCodes.Status500InternalServerError, $"{ex.GetType().Name}: {ex.Message}");
         }
     }
 
