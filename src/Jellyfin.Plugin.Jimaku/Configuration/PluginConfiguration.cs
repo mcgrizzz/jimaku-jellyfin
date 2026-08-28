@@ -76,6 +76,16 @@ public class PluginConfiguration : BasePluginConfiguration
     /// </remarks>
     public double MinCorrectionSeconds { get; set; } = 0.15;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether an offset shared by most candidates is treated as
+    /// the reference track's own timing and discounted rather than applied.
+    /// </summary>
+    /// <remarks>
+    /// Several independently produced subtitles needing the identical correction is evidence about
+    /// the reference, not about the subtitles. Turn this off to apply measured offsets verbatim.
+    /// </remarks>
+    public bool DetectReferenceBias { get; set; } = true;
+
     /// <summary>Gets or sets a value indicating whether framerate ratios are tested.</summary>
     public bool EnableFramerateCorrection { get; set; } = true;
 

@@ -276,10 +276,24 @@ public sealed class JimakuSyncService(
             }
         }
 
+        // When several independently produced subtitles all need the same correction, that shared
+        // offset belongs to the reference, not to any of them. Remove it before choosing, so what
+        // remains is each subtitle's own error.
+        if (configuration.DetectReferenceBias)
+        {
+            ApplyReferenceBiasCorrection(measured.Select(m => m.Candidate).ToList(), configuration);
+        }
+
+        // Language first, then fit.
+        //
+        // A bilingual release is a worse outcome for someone asking for Japanese subtitles no
+        // matter how well it correlates, so a hundredth of a point of correlation must not buy its
+        // way past that. Ranking fit first let a [CHS, JPN] file beat its own [JPN] sibling on
+        // r=1.00 against r=0.99 - a difference well inside the measurement noise.
         var best = measured
             .Where(m => m.Candidate.Alignment!.IsAcceptable)
-            .OrderByDescending(m => Quality(m.Candidate))
-            .ThenBy(m => LanguageRank(m.Candidate.Languages))
+            .OrderBy(m => LanguageRank(m.Candidate.Languages))
+            .ThenByDescending(m => Quality(m.Candidate))
             .ThenByDescending(m => m.Candidate.NameMatch.Score)
             .Select(m => (Item: m, Found: true))
             .FirstOrDefault();
@@ -479,6 +493,67 @@ public sealed class JimakuSyncService(
         // episode filter is set, which silently hides season packs. Ask again without the filter.
         logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entry.Id);
         return await apiClient.GetFilesAsync(entry.Id, null, apiKey, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Subtracts any offset shared by most candidates, and re-derives each verdict from what is
+    /// left. A candidate whose remaining error falls below the correction threshold becomes an
+    /// exact match written unchanged.
+    /// </summary>
+    private void ApplyReferenceBiasCorrection(
+        IReadOnlyList<SubtitleCandidate> candidates,
+        PluginConfiguration configuration)
+    {
+        var offsets = candidates
+            .Where(c => c.Alignment is { Verdict: SyncVerdict.ConstantOffset or SyncVerdict.Exact })
+            .Select(c => c.Alignment!.Transform.OffsetSeconds)
+            .ToList();
+
+        var bias = ReferenceBias.Detect(offsets);
+        if (!bias.Detected || Math.Abs(bias.OffsetSeconds) < 0.02)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "{Agreeing} of {Total} candidates agree on a {Bias:+0.000;-0.000}s offset; treating it as the reference's own timing and not correcting for it.",
+            bias.Agreeing,
+            bias.Total,
+            bias.OffsetSeconds);
+
+        foreach (var candidate in candidates)
+        {
+            var alignment = candidate.Alignment;
+            if (alignment is null || !alignment.Transform.IsShiftOnly)
+            {
+                continue;
+            }
+
+            var corrected = alignment.Transform.OffsetSeconds - bias.OffsetSeconds;
+            alignment.Transform = new TimingTransform(alignment.Transform.Scale, corrected);
+            alignment.ReferenceBiasSeconds = bias.OffsetSeconds;
+
+            if (alignment.Verdict is not (SyncVerdict.ConstantOffset or SyncVerdict.Exact))
+            {
+                continue;
+            }
+
+            if (Math.Abs(corrected) < configuration.MinCorrectionSeconds)
+            {
+                alignment.Verdict = SyncVerdict.Exact;
+                alignment.Transform = TimingTransform.Identity;
+                alignment.Reason = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Already in sync. The {bias.OffsetSeconds:+0.000;-0.000}s difference is shared by {bias.Agreeing} of {bias.Total} candidates, so it belongs to the reference track rather than to this subtitle.");
+            }
+            else
+            {
+                alignment.Verdict = SyncVerdict.ConstantOffset;
+                alignment.Reason = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Constant offset of {corrected:+0.000;-0.000}s, after discounting the {bias.OffsetSeconds:+0.000;-0.000}s shared by {bias.Agreeing} of {bias.Total} candidates.");
+            }
+        }
     }
 
     /// <summary>

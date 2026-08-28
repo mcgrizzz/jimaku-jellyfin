@@ -60,6 +60,9 @@ public class CandidateDto
 
     /// <summary>Gets or sets why this candidate's timing was accepted or rejected.</summary>
     public string? TimingNotes { get; set; }
+
+    /// <summary>Gets or sets an offset attributed to the reference track and discounted.</summary>
+    public double? ReferenceBiasSeconds { get; set; }
 }
 
 /// <summary>The result of a sync attempt.</summary>

@@ -220,6 +220,7 @@ public class JimakuController(
         PeakRatio = candidate.Alignment?.PeakRatio,
         Correction = candidate.Alignment?.Transform.Describe(),
         TimingNotes = candidate.Alignment?.Reason,
+        ReferenceBiasSeconds = candidate.Alignment?.ReferenceBiasSeconds,
     };
 
     private static SyncResultDto ToDto(SyncResult result) => new()

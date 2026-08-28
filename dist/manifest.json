@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.7.0",
-                "changelog": "- Measure every candidate and pick the best, instead of taking the first that passes. Better\n  matches were previously never downloaded.\n- Apply corrections down to 0.15s again; a fifth of a second is visible on screen. Raise\n  \"Smallest correction worth applying\" if that is too eager for your media.",
+                "version": "1.0.8.0",
+                "changelog": "- Never pick a bilingual subtitle over a Japanese-only one. Language now outranks a fractional\n  difference in correlation.\n- Discount an offset shared by most candidates: it belongs to the reference track, not to the\n  subtitles, and applying it shifted well-timed files out of sync.\n- Let any measured candidate be applied by hand, including one that failed verification.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.7.0.zip",
-                "checksum": "8f792dc1f4ccbacea571cf42ab2de0dc",
-                "timestamp": "2026-08-28T19:25:06Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.8.0.zip",
+                "checksum": "fe49adf1d6a8231926dde55b2f1209db",
+                "timestamp": "2026-08-28T19:57:45Z"
             }
         ]
     }

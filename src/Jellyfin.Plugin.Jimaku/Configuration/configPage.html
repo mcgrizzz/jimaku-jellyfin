@@ -97,6 +97,16 @@
             </div>
           </div>
 
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="DetectReferenceBias" />
+            <span>Discount an offset shared by most candidates</span>
+          </label>
+          <div class="fieldDescription">
+            When several unrelated subtitles all need the same correction, that offset describes the
+            reference track's own lead-in rather than any fault in the subtitles, and applying it
+            shifts a well-timed file out of sync. Each subtitle's individual error is still applied.
+          </div>
+
           <div class="inputContainer">
             <input is="emby-input" type="number" id="MaxOffsetSeconds" step="1" min="0"
                    label="Largest correction to apply (seconds)" />

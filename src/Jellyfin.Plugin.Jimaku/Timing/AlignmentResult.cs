@@ -42,6 +42,12 @@ public sealed class AlignmentResult
     public string ReferenceSource { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets an offset found to be shared by most candidates and therefore attributed to the
+    /// reference track rather than to any subtitle. Already discounted from <see cref="Transform"/>.
+    /// </summary>
+    public double ReferenceBiasSeconds { get; set; }
+
+    /// <summary>
     /// Gets or sets a plain-language explanation. Always populated when the verdict is
     /// <see cref="SyncVerdict.Declined"/>, so the user is told why nothing was written.
     /// </summary>

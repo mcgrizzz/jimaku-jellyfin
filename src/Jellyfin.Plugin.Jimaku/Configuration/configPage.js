@@ -4,7 +4,7 @@ const FIELDS = {
     checkbox: [
         'EnableScheduledTask', 'OverwriteExisting', 'AllowArchives',
         'EnableFramerateCorrection', 'AllowPiecewiseOnDemand', 'AllowPiecewiseScheduled',
-        'EnableAudioFallback'
+        'EnableAudioFallback', 'DetectReferenceBias'
     ],
     number: [
         'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
@@ -215,11 +215,18 @@ function renderCandidates(view, candidates, itemId) {
     }
 
     const rows = candidates.map(c => {
+        // Any candidate the filter did not reject can be applied by hand, including one that
+        // failed verification: correlation compares cue structure, so a subtitle that is timed
+        // correctly but segmented differently from the reference can score poorly and still be
+        // the right file. The person watching it is the better judge.
+        const declined = c.Verdict === 'Declined';
         const action = (itemId && c.Usable)
             ? `<button is="emby-button" type="button" class="raised jimaku-apply"
                  data-id="${itemId}" data-entry="${c.EntryId}"
-                 data-url="${escapeHtml(c.Url)}" data-file="${escapeHtml(c.FileName)}">
-                 <span>Use this</span></button>`
+                 data-url="${escapeHtml(c.Url)}" data-file="${escapeHtml(c.FileName)}"
+                 data-force="${declined ? '1' : '0'}"
+                 title="${declined ? 'Write this despite failing verification' : 'Verify and write this subtitle'}">
+                 <span>${declined ? 'Use anyway' : 'Use this'}</span></button>`
             : escapeHtml(c.RejectedBecause || '');
 
         // Entry notes frequently say which release the subtitles were timed for.
@@ -293,7 +300,8 @@ function applyCandidate(view, button) {
         data: JSON.stringify({
             EntryId: Number(button.dataset.entry),
             FileName: button.dataset.file,
-            Url: button.dataset.url
+            Url: button.dataset.url,
+            ApplyEvenIfUnverified: button.dataset.force === '1'
         }),
         contentType: 'application/json',
         dataType: 'json'
