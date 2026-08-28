@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.10.0",
-                "changelog": "- Choose the timing reference by agreement between the embedded tracks, not by cue count. The\n  densest track is often the group's own, carrying karaoke and signs and timed differently.\n- Rank candidates on how much dialogue they actually cover, not only on how well they align.\n  A subtitle that omits lines and holds them briefly no longer beats a fuller one.",
+                "version": "1.0.11.0",
+                "changelog": "- Choose the timing reference by agreement between the embedded tracks, not by cue count. The\n  densest track is often the group's own, carrying karaoke and signs and timed differently.\n- Rank candidates on how much dialogue they actually cover, not only on how well they align.\n  A subtitle that omits lines and holds them briefly no longer beats a fuller one.\n- Stop demoting subtitles whose filename does not state a language; only bilingual releases\n  are ranked down now.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.10.0.zip",
-                "checksum": "0c7be36918d1c111927c2b1d9593b6bc",
-                "timestamp": "2026-08-28T21:32:30Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.11.0.zip",
+                "checksum": "71dcbb013defa086b7ce19f7b12778f8",
+                "timestamp": "2026-08-28T21:41:14Z"
             }
         ]
     }

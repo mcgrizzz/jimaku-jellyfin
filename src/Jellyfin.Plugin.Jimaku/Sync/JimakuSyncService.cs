@@ -593,13 +593,22 @@ public sealed class JimakuSyncService(
         return coverage + correlation + uniqueness - penalty;
     }
 
-    /// <summary>Ranks candidates by how likely the file is to be usefully Japanese.</summary>
+    /// <summary>
+    /// Ranks candidates by how likely the file is to be usefully Japanese.
+    /// </summary>
+    /// <remarks>
+    /// An unlabelled filename ranks level with an explicitly Japanese one. Jimaku hosts Japanese
+    /// subtitles, so a name that simply does not mention a language says nothing against the file -
+    /// and demoting it meant a better subtitle could lose to a worse one purely for lacking a
+    /// "[JPN]" tag, before coverage was ever compared. Only a bilingual release is genuinely worse,
+    /// because it renders Chinese as the prominent line.
+    /// </remarks>
     private static int LanguageRank(SubtitleLanguages languages) => languages switch
     {
         SubtitleLanguages.JapaneseOnly => 0,
-        SubtitleLanguages.Unknown => 1,
-        SubtitleLanguages.Multilingual => 2,
-        _ => 3,
+        SubtitleLanguages.Unknown => 0,
+        SubtitleLanguages.Multilingual => 1,
+        _ => 2,
     };
 
     private static string BuildDeclineMessage(List<SubtitleCandidate> usable, ReferenceTrack? reference)

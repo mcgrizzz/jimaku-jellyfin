@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 11
+version: 12
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -20,3 +20,5 @@ changelog: |-
     densest track is often the group's own, carrying karaoke and signs and timed differently.
   - Rank candidates on how much dialogue they actually cover, not only on how well they align.
     A subtitle that omits lines and holds them briefly no longer beats a fuller one.
+  - Stop demoting subtitles whose filename does not state a language; only bilingual releases
+    are ranked down now.

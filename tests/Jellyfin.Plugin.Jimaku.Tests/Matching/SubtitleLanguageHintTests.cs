@@ -38,3 +38,54 @@ public class SubtitleLanguageHintTests
         Assert.Equal(SubtitleLanguages.Unknown, SubtitleLanguageHint.Classify(fileName));
     }
 }
+
+/// <summary>
+/// Language preference exists to demote bilingual releases, not to demote files that simply do not
+/// advertise a language. Ranking "unknown" below "Japanese only" let a subtitle covering more of
+/// the dialogue lose to a sparser one before coverage was even compared.
+/// </summary>
+public class LanguagePreferenceScopeTests
+{
+    [Theory]
+    [InlineData(SubtitleLanguages.JapaneseOnly, SubtitleLanguages.Unknown, true)]
+    [InlineData(SubtitleLanguages.Unknown, SubtitleLanguages.JapaneseOnly, true)]
+    [InlineData(SubtitleLanguages.JapaneseOnly, SubtitleLanguages.Multilingual, false)]
+    [InlineData(SubtitleLanguages.Unknown, SubtitleLanguages.Multilingual, false)]
+    public void RankedLevel(SubtitleLanguages left, SubtitleLanguages right, bool expectedEqual)
+    {
+        // Mirrors JimakuSyncService.LanguageRank.
+        static int Rank(SubtitleLanguages l) => l switch
+        {
+            SubtitleLanguages.JapaneseOnly => 0,
+            SubtitleLanguages.Unknown => 0,
+            SubtitleLanguages.Multilingual => 1,
+            _ => 2,
+        };
+
+        Assert.Equal(expectedEqual, Rank(left) == Rank(right));
+    }
+
+    [Fact]
+    public void TheRealPair_IsDecidedOnQualityNotOnLabelling()
+    {
+        // AnimeOut carries no language tag; the Nekomoe file says [JPN]. They must reach the
+        // quality comparison level, or the better subtitle loses on a naming convention.
+        var animeOut = SubtitleLanguageHint.Classify(
+            "[AnimeOut] Mushoku Tensei Jobless Reincarnation - 01 BD Remux 720p FLAC AAC [Dual-Audio] [CE93C369][OZR][RapidBot].srt");
+        var nekomoe = SubtitleLanguageHint.Classify(
+            "[Nekomoe kissaten&VCB-Studio] Mushoku Tensei ~Isekai Ittara Honki Dasu~ [01][Ma10p_1080p][x265_flac][JPN].ass");
+
+        Assert.Equal(SubtitleLanguages.Unknown, animeOut);
+        Assert.Equal(SubtitleLanguages.JapaneseOnly, nekomoe);
+
+        static int Rank(SubtitleLanguages l) => l switch
+        {
+            SubtitleLanguages.JapaneseOnly => 0,
+            SubtitleLanguages.Unknown => 0,
+            SubtitleLanguages.Multilingual => 1,
+            _ => 2,
+        };
+
+        Assert.Equal(Rank(nekomoe), Rank(animeOut));
+    }
+}
