@@ -175,13 +175,19 @@ public sealed class JimakuSyncService(
             return result;
         }
 
-        if (configuration.MinNameScore > 0 && options.ForcedFile is null)
+        // The filename score orders candidates; it must never exclude them. Release naming on
+        // Jimaku bears little relation to the local file's naming, so a low score routinely belongs
+        // to a subtitle that matches perfectly - which is exactly what verification is for. Capping
+        // the count bounds the work without pre-judging which one is right.
+        if (usable.Count > configuration.MaxCandidatesToTry)
         {
-            var above = usable.Where(c => c.NameMatch.Score >= configuration.MinNameScore).ToList();
-            if (above.Count > 0)
-            {
-                usable = above;
-            }
+            logger.LogDebug(
+                "{Count} usable candidates for {Name}; trying the {Max} best-named.",
+                usable.Count,
+                episode.Name,
+                configuration.MaxCandidatesToTry);
+
+            usable = usable.Take(configuration.MaxCandidatesToTry).ToList();
         }
 
         // The reference is derived once and reused for every candidate: extracting an embedded

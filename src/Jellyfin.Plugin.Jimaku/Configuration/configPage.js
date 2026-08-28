@@ -7,7 +7,7 @@ const FIELDS = {
         'EnableAudioFallback'
     ],
     number: [
-        'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MinNameScore',
+        'MinCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
         'RetryDeclinedAfterDays', 'KaraokePolicy'
     ],
     text: ['ApiKey', 'LanguageTag', 'SileroModelPath']
@@ -227,18 +227,27 @@ function renderCandidates(view, candidates, itemId) {
         const unverified = c.EntryUnverified
             ? '<span title="this entry is flagged unverified on Jimaku" style="opacity:0.75;">[unverified] </span>' : '';
 
-        return `<tr>
+        // Measured numbers appear only for candidates that were actually downloaded and checked.
+        const timing = c.Verdict
+            ? `<div><strong>${escapeHtml(c.Verdict)}</strong>` +
+              ` &middot; r ${Number(c.Correlation).toFixed(2)}` +
+              ` &middot; uniqueness ${Number(c.PeakRatio).toFixed(2)}` +
+              (c.Correction && c.Correction !== 'unchanged' ? ` &middot; ${escapeHtml(c.Correction)}` : '') +
+              `</div><div style="opacity:0.75;font-size:0.9em;">${escapeHtml(c.TimingNotes || '')}</div>`
+            : '<span style="opacity:0.6;">not measured</span>';
+
+        return `<tr style="vertical-align:top;">
             <td style="padding:0.25em 0.75em 0.25em 0;">${unverified}${escapeHtml(c.FileName)}${notes}</td>
             <td style="padding:0.25em 0.75em;">${c.NameScore}</td>
-            <td style="padding:0.25em 0.75em;">${escapeHtml(c.NameNotes)}</td>
+            <td style="padding:0.25em 0.75em;">${timing}</td>
             <td style="padding:0.25em 0;">${action}</td>
         </tr>`;
     }).join('');
 
     container.innerHTML = `<table style="width:100%;border-collapse:collapse;">
         <thead><tr style="text-align:left;">
-            <th style="padding-right:0.75em;">File</th><th style="padding:0 0.75em;">Name match</th>
-            <th style="padding:0 0.75em;">Notes</th><th></th>
+            <th style="padding-right:0.75em;">File</th><th style="padding:0 0.75em;">Name</th>
+            <th style="padding:0 0.75em;">Timing</th><th></th>
         </tr></thead><tbody>${rows}</tbody></table>
         <p class="fieldDescription" style="margin-top:0.5em;">
             The name match is only a pre-filter. Timing is verified against your media before

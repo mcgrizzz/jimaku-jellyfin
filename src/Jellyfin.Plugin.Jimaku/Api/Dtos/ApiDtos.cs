@@ -45,6 +45,21 @@ public class CandidateDto
 
     /// <summary>Gets or sets why the file was rejected, if it was.</summary>
     public string RejectedBecause { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the timing verdict, when this candidate was actually measured.</summary>
+    public string? Verdict { get; set; }
+
+    /// <summary>Gets or sets the measured correlation, when this candidate was measured.</summary>
+    public double? Correlation { get; set; }
+
+    /// <summary>Gets or sets the measured uniqueness, when this candidate was measured.</summary>
+    public double? PeakRatio { get; set; }
+
+    /// <summary>Gets or sets the correction that would be applied, when measured.</summary>
+    public string? Correction { get; set; }
+
+    /// <summary>Gets or sets why this candidate's timing was accepted or rejected.</summary>
+    public string? TimingNotes { get; set; }
 }
 
 /// <summary>The result of a sync attempt.</summary>

@@ -115,8 +115,13 @@ public class PluginConfiguration : BasePluginConfiguration
     public int RetryDeclinedAfterDays { get; set; } = 14;
 
     /// <summary>
-    /// Gets or sets the minimum filename match score, out of 100, a candidate needs before its
-    /// timing is even measured.
+    /// Gets or sets how many candidates may be downloaded and timing-checked for one episode.
     /// </summary>
-    public int MinNameScore { get; set; } = 20;
+    /// <remarks>
+    /// Candidates are tried in filename-match order, but the filename never excludes one. Jimaku
+    /// uploads are named after the release they came from, which frequently has nothing in common
+    /// with the local file's name, so a poorly scoring candidate is often the one that matches. The
+    /// cap bounds the work without pre-judging the answer.
+    /// </remarks>
+    public int MaxCandidatesToTry { get; set; } = 8;
 }

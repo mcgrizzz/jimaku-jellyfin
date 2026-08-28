@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.4.0",
-                "changelog": "- Find non-anime entries. Jimaku's search filters to anime by default even when given an\n  exact ID, so live-action entries were invisible; searches now retry without the filter.\n- Show Jimaku's entry notes and unverified flag alongside each candidate.",
+                "version": "1.0.5.0",
+                "changelog": "- Stop discarding candidates on filename score. A subtitle whose name shares nothing with\n  your file is often the one that matches, and the old threshold skipped it entirely.\n- Choose the embedded subtitle track with the most cues as the timing reference, instead of\n  the first one by language. A signs-only track made every candidate look untrustworthy.\n- Show the measured correlation, uniqueness and correction for each candidate checked.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.4.0.zip",
-                "checksum": "b0b6c1fc45a8c08a61cb7b7a37f30dd8",
-                "timestamp": "2026-08-28T18:38:51Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.5.0.zip",
+                "checksum": "7a507136885093001e82ee38be2cc1a9",
+                "timestamp": "2026-08-28T18:45:24Z"
             }
         ]
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -20,14 +21,14 @@ namespace Jellyfin.Plugin.Jimaku.Media;
 /// This is by far the best reference available and is always tried first. It needs no audio
 /// analysis, takes about a second, and compares cue structure rather than acoustic energy, which
 /// matters enormously for anime where a continuous musical score defeats energy-based detection.
-/// The track's language is irrelevant: an English or signs-only track marks the same moments in
-/// time as the Japanese dialogue it accompanies.
 /// </remarks>
 public sealed class EmbeddedSubtitleReferenceProvider(
     IMediaSourceManager mediaSourceManager,
     ISubtitleEncoder subtitleEncoder,
     ILogger<EmbeddedSubtitleReferenceProvider> logger) : IReferenceTrackProvider
 {
+    private const int MinimumCues = 10;
+
     private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "mov_text", "text", "webvtt"];
 
     /// <inheritdoc />
@@ -48,87 +49,127 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             return null;
         }
 
-        var stream = SelectStream(source);
-        if (stream is null)
+        var streams = SelectStreams(source);
+        if (streams.Count == 0)
         {
             logger.LogDebug("{Path} has no embedded text subtitle track to use as a timing reference.", item.Path);
             return null;
         }
 
-        string path;
-        try
+        // Choose by cue density, not by language.
+        //
+        // Language is irrelevant to timing - an English or Chinese dialogue track marks the same
+        // moments as the Japanese audio. What is *not* irrelevant is whether the track is full
+        // dialogue or just signs and songs. A signs track has a few dozen cues spread thinly across
+        // the episode, which produces a nearly flat correlation surface: every candidate then scores
+        // a uniqueness around 1.0 and is declined, including the correct one.
+        //
+        // Reading several tracks is cheap because Jellyfin extracts every text track in a single
+        // ffmpeg pass, so all but the first are cache hits.
+        MediaStream? bestStream = null;
+        CueTrack? bestTrack = null;
+
+        foreach (var candidate in streams)
         {
-            // Extracts into the server's own subtitle cache and hands back a real file, reusing
-            // Jellyfin's extraction and locking rather than duplicating it.
-            path = await subtitleEncoder
-                .GetSubtitleFilePath(stream, source!, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Extracting embedded subtitle stream {Index} from {Path} failed.", stream.Index, item.Path);
-            return null;
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var parsed = await TryReadCuesAsync(candidate, source!, item, cancellationToken).ConfigureAwait(false);
+            if (parsed is null)
+            {
+                continue;
+            }
+
+            logger.LogDebug(
+                "Stream {Index} ({Language} {Codec}) of {Path} has {Count} usable cues.",
+                candidate.Index,
+                candidate.Language ?? "und",
+                candidate.Codec,
+                item.Path,
+                parsed.Count);
+
+            if (bestTrack is null || parsed.Count > bestTrack.Count)
+            {
+                bestStream = candidate;
+                bestTrack = parsed;
+            }
         }
 
-        if (string.IsNullOrEmpty(path) || !File.Exists(path))
-        {
-            return null;
-        }
-
-        CueTrack track;
-        try
-        {
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-            track = SubtitleDocument.Parse(bytes).ToCueTrack();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Parsing the extracted subtitle at {Path} failed.", path);
-            return null;
-        }
-
-        if (track.Count < 10)
+        if (bestStream is null || bestTrack is null || bestTrack.Count < MinimumCues)
         {
             logger.LogDebug(
-                "The embedded subtitle track for {Path} has only {Count} usable cues, which is too few to align against.",
+                "No embedded subtitle track for {Path} had enough cues to align against; best had {Count}.",
                 item.Path,
-                track.Count);
+                bestTrack?.Count ?? 0);
             return null;
         }
+
+        logger.LogInformation(
+            "Timing reference for {Path}: embedded stream {Index} ({Language} {Codec}) with {Count} cues.",
+            item.Path,
+            bestStream.Index,
+            bestStream.Language ?? "und",
+            bestStream.Codec,
+            bestTrack.Count);
 
         var duration = item.RunTimeTicks.HasValue
             ? TimeSpan.FromTicks(item.RunTimeTicks.Value).TotalSeconds
-            : track.LastEndSeconds;
+            : bestTrack.LastEndSeconds;
 
-        var description = string.IsNullOrEmpty(stream.Language)
-            ? $"embedded {stream.Codec} subtitles"
-            : $"embedded {stream.Language} subtitles";
+        var language = string.IsNullOrEmpty(bestStream.Language) ? bestStream.Codec : bestStream.Language;
+        var description = $"embedded {language} subtitles ({bestTrack.Count} cues)";
 
-        return new ReferenceTrack(ActivitySignal.FromCues(track, duration), description, true);
+        return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true);
     }
 
-    private static MediaStream? SelectStream(MediaSourceInfo? source)
+    private static List<MediaStream> SelectStreams(MediaSourceInfo? source)
     {
         if (source?.MediaStreams is null)
         {
-            return null;
+            return [];
         }
 
-        var candidates = source.MediaStreams
+        return source.MediaStreams
             .Where(s => s.Type == MediaStreamType.Subtitle)
             .Where(s => !s.IsExternal)
             .Where(s => s.Codec is not null && TextCodecs.Contains(s.Codec, StringComparer.OrdinalIgnoreCase))
             .ToList();
+    }
 
-        if (candidates.Count == 0)
+    /// <summary>Extracts one embedded track and reduces it to cue timings, or null on failure.</summary>
+    private async Task<CueTrack?> TryReadCuesAsync(
+        MediaStream stream,
+        MediaSourceInfo source,
+        BaseItem item,
+        CancellationToken cancellationToken)
+    {
+        try
         {
+            // Extracts into the server's own subtitle cache and returns a real file, reusing
+            // Jellyfin's extraction and locking rather than duplicating it.
+            var path = await subtitleEncoder
+                .GetSubtitleFilePath(stream, source, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                return null;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+            return SubtitleDocument.Parse(bytes).ToCueTrack();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(
+                ex,
+                "Could not read embedded subtitle stream {Index} of {Path}.",
+                stream.Index,
+                item.Path);
             return null;
         }
-
-        // Any language works as a timing reference, but prefer Japanese, then English, purely
-        // because full dialogue tracks have denser and more evenly spread cues than signs-only ones.
-        return candidates.FirstOrDefault(s => string.Equals(s.Language, "jpn", StringComparison.OrdinalIgnoreCase))
-            ?? candidates.FirstOrDefault(s => string.Equals(s.Language, "eng", StringComparison.OrdinalIgnoreCase))
-            ?? candidates[0];
     }
 }

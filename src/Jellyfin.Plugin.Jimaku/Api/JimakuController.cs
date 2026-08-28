@@ -213,6 +213,13 @@ public class JimakuController(
         RejectedBecause = candidate.NameMatch.EpisodeMismatch
             ? candidate.NameMatch.Notes
             : new Matching.FilteredCandidate(candidate.File, candidate.Rejection).Explain(),
+
+        // Populated only for candidates that were actually downloaded and measured.
+        Verdict = candidate.Alignment?.Verdict.ToString(),
+        Correlation = candidate.Alignment?.Correlation,
+        PeakRatio = candidate.Alignment?.PeakRatio,
+        Correction = candidate.Alignment?.Transform.Describe(),
+        TimingNotes = candidate.Alignment?.Reason,
     };
 
     private static SyncResultDto ToDto(SyncResult result) => new()

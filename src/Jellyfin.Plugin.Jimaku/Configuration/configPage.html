@@ -97,11 +97,13 @@
           </div>
 
           <div class="inputContainer">
-            <input is="emby-input" type="number" id="MinNameScore" step="5" min="0" max="100"
-                   label="Minimum filename match score (0-100)" />
+            <input is="emby-input" type="number" id="MaxCandidatesToTry" step="1" min="1" max="25"
+                   label="Candidates to check per episode" />
             <div class="fieldDescription">
-              A cheap pre-filter so timing analysis is only spent on plausible candidates. It never
-              decides the outcome on its own.
+              Candidates are tried in filename-match order, but a poor filename never excludes one:
+              Jimaku uploads are named after the release they came from, which often has nothing in
+              common with your file's name, so a low-scoring candidate is frequently the one that
+              matches. Timing decides.
             </div>
           </div>
 
