@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using System.Linq;
 using Jellyfin.Plugin.Jimaku.Configuration;
 using Jellyfin.Plugin.Jimaku.Media;
@@ -51,14 +52,22 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             EnableFramerateSearch = configuration.EnableFramerateCorrection,
         });
 
-        var fits = search.Search(reference.Signal, probe);
+        // Two ways of looking at the same pair, on two different scales.
+        //
+        // Overlap fills every bin a cue occupies; onsets place one short pulse per cue. The onset
+        // signal is far sparser, so it scores lower correlation on an identical match, which is why
+        // each carries its own accept floor. That also means they cannot be compared to each other
+        // by raw correlation: doing so always favoured overlap, which then failed its own stricter
+        // uniqueness bar and declined subtitles that onsets accepted comfortably. Compare them by
+        // how far each clears its own floors instead.
+        var hypotheses = new List<Hypothesis>();
 
-        // Also compare cue starts alone. Overlap scoring rewards matching durations as well as
-        // timings, so a subtitle that marks the same moments but splits lines differently scores
-        // poorly despite being correct - a Blu-ray release measured against a streaming track, say.
-        // Onsets ignore how lines are divided and compare only when each one begins.
-        var representation = "cue overlap";
-        var matchedOnOnsets = false;
+        var overlapFits = search.Search(reference.Signal, probe);
+        if (overlapFits.Count > 0)
+        {
+            hypotheses.Add(new Hypothesis(overlapFits[0], "cue overlap", configuration.MinCorrelation));
+        }
+
         if (reference.Cues is { Count: > 0 } referenceCues)
         {
             var onsetFits = search.Search(
@@ -66,20 +75,26 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
                 probe,
                 onsets: true);
 
-            if (onsetFits.Count > 0 && (fits.Count == 0 || Better(onsetFits[0], fits[0])))
+            if (onsetFits.Count > 0)
             {
-                fits = onsetFits;
-                representation = "cue starts";
-                matchedOnOnsets = true;
+                hypotheses.Add(new Hypothesis(onsetFits[0], "cue starts", configuration.MinOnsetCorrelation));
             }
         }
 
-        if (fits.Count == 0)
+        if (hypotheses.Count == 0)
         {
             return AlignmentResult.Decline("The alignment search produced no result.", reference.Source);
         }
 
-        var best = fits[0];
+        var chosen = hypotheses
+            .OrderByDescending(h => h.Passes(configuration.MinPeakRatio))
+            .ThenByDescending(h => h.Margin(configuration.MinPeakRatio))
+            .First();
+
+        var best = chosen.Fit;
+        var minCorrelation = chosen.MinCorrelation;
+        var representation = chosen.Representation;
+
         var result = new AlignmentResult
         {
             Transform = best.Transform,
@@ -101,11 +116,6 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             result.Coverage = coverage.ReferenceCovered;
             result.OnScreenRatio = coverage.OnScreenRatio;
         }
-
-        // The two representations are not on the same scale, so they cannot share a threshold.
-        var minCorrelation = matchedOnOnsets
-            ? configuration.MinOnsetCorrelation
-            : configuration.MinCorrelation;
 
         var globalIsGood = best.Correlation >= minCorrelation
                            && best.PeakRatio >= configuration.MinPeakRatio;
@@ -192,19 +202,28 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
     }
 
     /// <summary>
-    /// Whether one fit is a better description of the same pair than another. Uniqueness carries
-    /// the comparison once correlation is close, because it is the measure that says the alignment
-    /// is unambiguous rather than merely strong.
+    /// One way of comparing a candidate with the reference, carrying the accept floor that applies
+    /// to its own scale.
     /// </summary>
-    private static bool Better(LinearFit candidate, LinearFit incumbent)
+    /// <param name="Fit">The best fit this comparison found.</param>
+    /// <param name="Representation">How the signals were built, for display.</param>
+    /// <param name="MinCorrelation">The correlation floor for this representation.</param>
+    private readonly record struct Hypothesis(LinearFit Fit, string Representation, double MinCorrelation)
     {
-        var correlationGain = candidate.Correlation - incumbent.Correlation;
-        if (Math.Abs(correlationGain) > 0.05)
-        {
-            return correlationGain > 0;
-        }
+        /// <summary>Whether this comparison clears its own thresholds.</summary>
+        public bool Passes(double minPeakRatio) =>
+            Fit.Correlation >= MinCorrelation && Fit.PeakRatio >= minPeakRatio;
 
-        return candidate.PeakRatio > incumbent.PeakRatio;
+        /// <summary>
+        /// How far the weaker of the two measures clears its floor. Expressing both as a multiple
+        /// of their own thresholds is what makes comparisons across the two scales meaningful.
+        /// </summary>
+        public double Margin(double minPeakRatio)
+        {
+            var correlation = MinCorrelation > 0 ? Fit.Correlation / MinCorrelation : Fit.Correlation;
+            var uniqueness = minPeakRatio > 0 ? Fit.PeakRatio / minPeakRatio : Fit.PeakRatio;
+            return Math.Min(correlation, uniqueness);
+        }
     }
 
     /// <summary>

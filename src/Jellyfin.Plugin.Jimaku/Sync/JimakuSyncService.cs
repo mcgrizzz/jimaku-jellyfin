@@ -645,7 +645,13 @@ public sealed class JimakuSyncService(
             return "None of the candidate subtitles could be downloaded or parsed.";
         }
 
-        var via = reference is null ? "no timing reference" : $"reference: {reference.Value.Source}";
+        // Prefer the alignment's own description, which records which comparison was used.
+        var source = best.Alignment.ReferenceSource;
+        var via = !string.IsNullOrEmpty(source)
+            ? $"reference: {source}"
+            : reference is null
+                ? "no timing reference"
+                : $"reference: {reference.Value.Source}";
         return string.Create(
             CultureInfo.InvariantCulture,
             $"Declined all {usable.Count} candidate(s). Closest was '{best.File.Name}' - {best.Alignment.Reason} ({via}).");
