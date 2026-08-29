@@ -170,6 +170,24 @@
             Off by default. It is the most permissive correction available, and an unattended job is
             the worst place to be permissive.
           </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MaxSplitBlocks" step="1" min="2"
+                   label="Most sections a subtitle may be split into" />
+            <div class="fieldDescription">
+              A real difference in cut produces a few substantial sections. Shattering into many
+              thin ones is what fitting noise looks like, so anything past this is rejected.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinCuesPerSplitBlock" step="1" min="2"
+                   label="Fewest lines a section may contain" />
+            <div class="fieldDescription">
+              A section built from a handful of lines can be made to fit almost anything. Raising
+              this makes the match stricter; lowering it allows shorter inserts to be corrected.
+            </div>
+          </div>
         </fieldset>
 
         <fieldset class="verticalSection">

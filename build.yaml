@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 23
+version: 24
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,12 +16,6 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Actually try the differing-cut aligner on differently-cut subtitles. The attempt was gated on
-    the global correlation being halfway decent, which is backwards: a subtitle cut differently has
-    no single offset that works, so its global correlation is low by construction. The guard now
-    sits on the split's own result, where it already was.
-  - Say what the piecewise attempt found when it fell short, rather than reporting a bare decline.
-    A split that reached 0.48 against a floor of 0.50 says the file is probably right.
-  - Offer the measured correction when applying a file by hand. "Use anyway" wrote it unchanged,
-    which is the worst outcome when the file is simply misaligned - now you can take the measured
-    shift on your own judgement, or type an exact one.
+  - Expose the two limits governing differing-cut matching: how many sections a subtitle may be
+    split into, and how few lines a section may contain. Both were only reachable by editing the
+    configuration file.
