@@ -120,13 +120,15 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         var globalIsGood = best.Correlation >= minCorrelation
                            && best.PeakRatio >= configuration.MinPeakRatio;
 
-        // A differing cut shows up as a global fit that is weak but not absent: parts of the
-        // subtitle line up, so try the piecewise aligner before giving up on the file.
-        var shouldTrySplit = allowPiecewise
-                             && (!globalIsGood || expectDifferentCut)
-                             && best.Correlation > minCorrelation / 2;
+        // A subtitle cut differently from the local release has no single offset that works, so the
+        // global correlation it scores is low by construction - which is exactly the case the
+        // piecewise aligner exists for. Gating the attempt on that correlation being halfway
+        // decent therefore excluded the files it was written to rescue. The guard belongs on the
+        // result instead: IsCredibleSplit demands a small number of substantial blocks that clear
+        // the same correlation floor and beat the global fit by a clear margin.
+        var splitNote = string.Empty;
 
-        if (shouldTrySplit)
+        if (allowPiecewise && (!globalIsGood || expectDifferentCut))
         {
             var split = new SplitAligner().Align(reference.Signal, probe, best.OffsetSeconds);
             if (IsCredibleSplit(split, best.Correlation, minCorrelation))
@@ -139,12 +141,14 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
                     $"Matched a different cut: {split.Blocks.Count} sections, offsets {string.Join(", ", split.Blocks.Select(b => b.OffsetSeconds.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)))}s.");
                 return result;
             }
+
+            splitNote = DescribeRejectedSplit(split, best.Correlation, minCorrelation);
         }
 
         if (!globalIsGood)
         {
             result.Verdict = SyncVerdict.Declined;
-            result.Reason = DescribeWeakMatch(best, minCorrelation);
+            result.Reason = DescribeWeakMatch(best, minCorrelation) + splitNote;
             return result;
         }
 
@@ -268,6 +272,34 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         // Piecewise correction has more freedom than a global fit, so it must earn its use by
         // beating it clearly rather than marginally.
         return split.Correlation > globalCorrelation + 0.05;
+    }
+
+    /// <summary>
+    /// Says what the piecewise attempt found, when it found something but not enough.
+    /// </summary>
+    /// <remarks>
+    /// Worth reporting rather than discarding. "Declined" reads as "this file is wrong", but a
+    /// split that reached 0.48 against a floor of 0.50 says the opposite - that the file is
+    /// probably right and the evidence just fell short, which is a case for looking at it by hand.
+    /// </remarks>
+    private string DescribeRejectedSplit(SplitResult split, double globalCorrelation, double minCorrelation)
+    {
+        if (split.Blocks.Count <= 1)
+        {
+            return string.Empty;
+        }
+
+        if (split.Blocks.Count > configuration.MaxSplitBlocks
+            || split.Blocks.Any(b => b.CueCount < configuration.MinCuesPerSplitBlock))
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $" Splitting it into sections fitted better but broke into {split.Blocks.Count} pieces, which is what fitting noise looks like rather than a real difference in cut.");
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $" Treating it as a different cut reached {split.Correlation:0.00} across {split.Blocks.Count} sections, short of the {Math.Max(minCorrelation, globalCorrelation + 0.05):0.00} needed to prefer it.");
     }
 
     private string DescribeWeakMatch(LinearFit best, double minCorrelation)

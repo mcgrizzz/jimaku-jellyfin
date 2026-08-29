@@ -248,14 +248,37 @@ function renderCandidates(view, candidates, itemId) {
         // correctly but segmented differently from the reference can score poorly and still be
         // the right file. The person watching it is the better judge.
         const declined = c.Verdict === 'Declined';
-        const action = (itemId && c.Usable)
-            ? `<button is="emby-button" type="button" class="raised jimaku-apply"
-                 data-id="${itemId}" data-entry="${c.EntryId}"
-                 data-url="${escapeHtml(c.Url)}" data-file="${escapeHtml(c.FileName)}"
+        const attrs = `data-id="${itemId}" data-entry="${c.EntryId}"
+             data-url="${escapeHtml(c.Url)}" data-file="${escapeHtml(c.FileName)}"`;
+
+        // A measured shift that failed verification is not necessarily a wrong one - usually the
+        // evidence was just too thin to act on unattended. Writing the file unchanged is the worst
+        // option when it is simply misaligned, so offer the correction as well as the raw file.
+        const measured = c.Correction && c.Correction !== 'unchanged' ? c.Correction : null;
+
+        let action = '';
+        if (itemId && c.Usable) {
+            action = `<button is="emby-button" type="button" class="raised jimaku-apply" ${attrs}
                  data-force="${declined ? '1' : '0'}"
-                 title="${declined ? 'Write this despite failing verification' : 'Verify and write this subtitle'}">
-                 <span>${declined ? 'Use anyway' : 'Use this'}</span></button>`
-            : escapeHtml(c.RejectedBecause || '');
+                 title="${declined ? 'Write this file exactly as published' : 'Verify and write this subtitle'}">
+                 <span>${declined ? 'Use as-is' : 'Use this'}</span></button>`;
+
+            if (declined && measured) {
+                action += `<button is="emby-button" type="button" class="raised jimaku-apply" ${attrs}
+                     data-force="1" data-measured="1" style="margin-top:0.3em;"
+                     title="Write it with the correction that was measured, even though the evidence fell short">
+                     <span>Use with ${escapeHtml(measured)}</span></button>`;
+            }
+
+            action += `<div style="margin-top:0.3em;white-space:nowrap;">
+                 <input is="emby-input" type="number" step="0.05" class="jimaku-offset"
+                        placeholder="shift s" style="width:6em;" />
+                 <button is="emby-button" type="button" class="raised jimaku-apply-offset" ${attrs}
+                        title="Write it shifted by exactly this many seconds, without verification">
+                     <span>Shift</span></button></div>`;
+        } else {
+            action = escapeHtml(c.RejectedBecause || '');
+        }
 
         // Entry notes frequently say which release the subtitles were timed for.
         const rejectedMark = c.PreviouslyRejected
@@ -566,7 +589,7 @@ function listCandidates(view, itemId) {
     }).catch(err => showError(view, err));
 }
 
-function applyCandidate(view, button) {
+function applyCandidate(view, button, manualOffset) {
     const status = view.querySelector('#ActionStatus');
     status.textContent = 'Downloading and verifying…';
 
@@ -577,7 +600,9 @@ function applyCandidate(view, button) {
             EntryId: Number(button.dataset.entry),
             FileName: button.dataset.file,
             Url: button.dataset.url,
-            ApplyEvenIfUnverified: button.dataset.force === '1'
+            ApplyEvenIfUnverified: button.dataset.force === '1' || manualOffset != null,
+            UseMeasuredTransform: button.dataset.measured === '1',
+            ManualOffsetSeconds: manualOffset
         }),
         contentType: 'application/json',
         dataType: 'json'
@@ -697,7 +722,21 @@ export default function (view) {
         const list = e.target.closest('.jimaku-list');
         if (list) { listCandidates(view, list.dataset.id); return; }
 
+        const shift = e.target.closest('.jimaku-apply-offset');
+        if (shift) {
+            const field = shift.parentElement.querySelector('.jimaku-offset');
+            const value = Number(field && field.value);
+            if (!field || field.value === '' || Number.isNaN(value)) {
+                view.querySelector('#ActionStatus').textContent =
+                    'Enter a shift in seconds first — negative moves the subtitle earlier.';
+                return;
+            }
+
+            applyCandidate(view, shift, value);
+            return;
+        }
+
         const apply = e.target.closest('.jimaku-apply');
-        if (apply) { applyCandidate(view, apply); }
+        if (apply) { applyCandidate(view, apply, null); }
     });
 }

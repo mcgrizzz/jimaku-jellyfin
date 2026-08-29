@@ -160,6 +160,8 @@ public class JimakuController(
                 ForcedEntryId = body.EntryId,
                 ForcedFile = new JimakuFile { Name = body.FileName, Url = body.Url },
                 ApplyEvenIfUnverified = body.ApplyEvenIfUnverified,
+                UseMeasuredTransform = body.UseMeasuredTransform,
+                ManualOffsetSeconds = body.ManualOffsetSeconds,
                 Interactive = true,
             },
             cancellationToken).ConfigureAwait(false);

@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.22.0",
+                "changelog": "- Actually try the differing-cut aligner on differently-cut subtitles. The attempt was gated on\n  the global correlation being halfway decent, which is backwards: a subtitle cut differently has\n  no single offset that works, so its global correlation is low by construction. The guard now\n  sits on the split's own result, where it already was.\n- Say what the piecewise attempt found when it fell short, rather than reporting a bare decline.\n  A split that reached 0.48 against a floor of 0.50 says the file is probably right.\n- Offer the measured correction when applying a file by hand. \"Use anyway\" wrote it unchanged,\n  which is the worst outcome when the file is simply misaligned - now you can take the measured\n  shift on your own judgement, or type an exact one.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.22.0.zip",
+                "checksum": "fa666ab3da6e183aea18680c2b5081bd",
+                "timestamp": "2026-08-29T16:32:22Z"
+            },
+            {
                 "version": "1.0.21.0",
                 "changelog": "- Use image-based subtitle tracks as a timing reference. A PGS or VobSub track carries no text,\n  but every display set has a presentation timestamp, so its timings are stated outright in the\n  packet headers - and timings are the only thing alignment ever uses. Disc rips, which most\n  often carry nothing but picture subtitles, are also where the audio fallback is weakest.\n- Read those timings with ffprobe alone: packet headers, no decoding and nothing written to disk.\n  Erase segments are folded into the cue they end rather than counted as cues of their own, which\n  would otherwise have doubled the cue count and halved every gap.",
                 "targetAbi": "10.11.0.0",

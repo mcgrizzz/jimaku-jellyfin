@@ -137,6 +137,15 @@ public class ApplyRequest
     /// verified. Only ever set by an explicit user choice.
     /// </summary>
     public bool ApplyEvenIfUnverified { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to apply the measured correction when writing an
+    /// unverified file, rather than writing it unchanged.
+    /// </summary>
+    public bool UseMeasuredTransform { get; set; }
+
+    /// <summary>Gets or sets an exact shift to apply, in seconds, bypassing measurement entirely.</summary>
+    public double? ManualOffsetSeconds { get; set; }
 }
 
 /// <summary>

@@ -155,6 +155,27 @@ public sealed class SyncOptions
     public bool ApplyEvenIfUnverified { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether an unverified file is written with the correction
+    /// that was measured, rather than unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Verification failing does not mean the measurement was wrong; usually it means the evidence
+    /// was too thin to act on unattended. Writing such a file unchanged is the worst of both
+    /// options when it is simply misaligned - the user gets the subtitle they asked for and it is
+    /// still out of sync. This lets them take the measurement on their own judgement.
+    /// </remarks>
+    public bool UseMeasuredTransform { get; set; }
+
+    /// <summary>
+    /// Gets or sets an exact shift to apply, in seconds, bypassing measurement entirely.
+    /// </summary>
+    /// <remarks>
+    /// The last resort, and the one that always works: a person watching the episode can see the
+    /// offset that no reference in the file supports measuring.
+    /// </remarks>
+    public double? ManualOffsetSeconds { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether to write the sidecar and refresh the item.
     /// </summary>
     /// <remarks>

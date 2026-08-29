@@ -515,6 +515,22 @@ public sealed class JimakuSyncService(
         SubtitleAligner aligner,
         SyncOptions options)
     {
+        // An offset given by hand settles the question before it is asked. Nothing here can be
+        // measured more reliably than by someone watching the episode, and this path has to work
+        // when there is no usable reference at all - which is exactly when it gets used.
+        if (options.ManualOffsetSeconds is { } manual)
+        {
+            return new AlignmentResult
+            {
+                Verdict = Math.Abs(manual) < 1e-9 ? SyncVerdict.Exact : SyncVerdict.ConstantOffset,
+                Transform = new TimingTransform(1.0, manual),
+                ReferenceSource = "an offset you supplied",
+                Reason = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Shifted by {manual:+0.000;-0.000}s as you specified, without verification."),
+            };
+        }
+
         // A shared CRC32 means the subtitle was released against this exact video file, so its
         // timing is identical by construction and there is nothing to measure.
         if (candidate.NameMatch.IsExactRelease)
@@ -549,9 +565,25 @@ public sealed class JimakuSyncService(
 
         if (!alignment.IsAcceptable && options.ApplyEvenIfUnverified)
         {
-            alignment.Verdict = SyncVerdict.Exact;
-            alignment.Transform = TimingTransform.Identity;
-            alignment.Reason = "Applied unchanged at your request, despite failing verification: " + alignment.Reason;
+            // Failing verification means the evidence was too thin to act on unattended, not that
+            // the measurement was wrong. Writing a misaligned file unchanged is the worst of both
+            // outcomes, so the correction is available to anyone willing to own the decision.
+            if (options.UseMeasuredTransform && !alignment.Transform.IsIdentity)
+            {
+                alignment.Reason = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Applied the measured correction ({alignment.Transform.Describe()}) at your request, despite it failing verification: {alignment.Reason}");
+
+                alignment.Verdict = alignment.Transform.IsShiftOnly
+                    ? SyncVerdict.ConstantOffset
+                    : SyncVerdict.FramerateDrift;
+            }
+            else
+            {
+                alignment.Verdict = SyncVerdict.Exact;
+                alignment.Transform = TimingTransform.Identity;
+                alignment.Reason = "Applied unchanged at your request, despite failing verification: " + alignment.Reason;
+            }
         }
 
         return alignment;
