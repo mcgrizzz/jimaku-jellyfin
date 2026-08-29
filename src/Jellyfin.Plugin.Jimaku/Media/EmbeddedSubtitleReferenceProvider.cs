@@ -25,6 +25,7 @@ namespace Jellyfin.Plugin.Jimaku.Media;
 public sealed class EmbeddedSubtitleReferenceProvider(
     IMediaSourceManager mediaSourceManager,
     ISubtitleEncoder subtitleEncoder,
+    SubtitlePacketTimings packetTimings,
     ILogger<EmbeddedSubtitleReferenceProvider> logger) : IReferenceTrackProvider
 {
     private const int MinimumCues = 10;
@@ -72,7 +73,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         if (streams.Count == 0)
         {
             logger.LogInformation(
-                "{Path} has {Count} embedded subtitle track(s) but none are text, so there is nothing to compare timings against.",
+                "{Path} has {Count} embedded subtitle track(s) and none of them yielded timings.",
                 item.Path,
                 all.Count);
             return null;
@@ -108,8 +109,12 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             cancellationToken.ThrowIfCancellationRequested();
 
             var info = report.Streams.Find(s => s.Index == candidate.Index);
-            var (parsed, failure) = await TryReadCuesAsync(candidate, source, item, cancellationToken)
-                .ConfigureAwait(false);
+
+            // A picture subtitle has no text to read, but its timings are stated outright in the
+            // packet headers - and timings are the only thing wanted here.
+            var (parsed, failure) = IsUsableText(candidate)
+                ? await TryReadCuesAsync(candidate, source, item, cancellationToken).ConfigureAwait(false)
+                : await TryReadPacketTimingsAsync(candidate, item, cancellationToken).ConfigureAwait(false);
 
             if (parsed is null)
             {
@@ -138,7 +143,9 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 
             if (info is not null)
             {
-                info.Status = "compared";
+                info.Status = IsUsableText(candidate)
+                    ? "compared"
+                    : "compared (timings read from packet headers)";
             }
 
             tracks.Add((candidate, parsed));
@@ -184,9 +191,13 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             : bestTrack.LastEndSeconds;
 
         var language = string.IsNullOrEmpty(bestStream.Language) ? bestStream.Codec : bestStream.Language;
+        var kind = IsUsableText(bestStream)
+            ? "subtitles"
+            : $"{bestStream.Codec} subtitle timings";
+
         var description = tracks.Count > 1
-            ? $"embedded {language} subtitles ({bestTrack.Count} cues, agreeing with {agreement}/{tracks.Count - 1} other tracks)"
-            : $"embedded {language} subtitles ({bestTrack.Count} cues)";
+            ? $"embedded {language} {kind} ({bestTrack.Count} cues, agreeing with {agreement}/{tracks.Count - 1} other tracks)"
+            : $"embedded {language} {kind} ({bestTrack.Count} cues)";
 
         report.Chosen = description;
         report.FromSubtitles = true;
@@ -298,12 +309,11 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 IsText = isText,
                 IsExtractable = stream.IsExtractableSubtitleStream,
 
-                // Image-based tracks are the common case on disc rips and cannot be read as text at
-                // all, which is worth stating: it is the usual reason a file with several subtitle
-                // tracks still ends up on the audio fallback.
+                // Image-based tracks carry no text, but every display set has a presentation
+                // timestamp - so their timings are available even though their words are not.
                 Status = isText
                     ? "available"
-                    : $"image-based ({stream.Codec ?? "unknown"}), which carries no readable timings",
+                    : $"image-based ({stream.Codec ?? "unknown"}); timings readable from packet headers",
             });
         }
     }
@@ -333,18 +343,43 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         stream.IsTextSubtitleStream
         || (stream.Codec is not null && TextCodecs.Contains(stream.Codec, StringComparer.OrdinalIgnoreCase));
 
-    private static List<MediaStream> SelectStreams(List<MediaStream> streams)
-    {
-        var text = streams.Where(IsUsableText).ToList();
-
-        // Dialogue first. A signs and songs track cues on title cards and lyrics rather than
-        // speech, so it measures something different from the subtitle being checked - but it is
-        // sorted down rather than removed, because on a file that carries nothing else it is still
-        // the best structure available.
-        return text
+    /// <summary>
+    /// Orders the subtitle streams worth reading timings from.
+    /// </summary>
+    /// <remarks>
+    /// Text tracks first, because reading them is cheaper - extraction is cached by the server,
+    /// whereas listing packets demuxes the container each time. Picture tracks are not excluded:
+    /// their timings are exact, and on a disc rip they are frequently all there is.
+    /// </remarks>
+    private static List<MediaStream> SelectStreams(List<MediaStream> streams) =>
+        streams
+            // Dialogue first. A signs and songs track cues on title cards and lyrics rather than
+            // speech, so it measures something different from the subtitle being checked - but it
+            // is sorted down rather than removed, because on a file that carries nothing else it is
+            // still the best structure available.
             .OrderBy(IsAnnotation)
+            .ThenByDescending(IsUsableText)
             .ThenByDescending(s => s.IsDefault)
             .ToList();
+
+    /// <summary>
+    /// Reads cue timings from an image-based track's packet headers.
+    /// </summary>
+    private async Task<(CueTrack? Cues, string Failure)> TryReadPacketTimingsAsync(
+        MediaStream stream,
+        BaseItem item,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(item.Path))
+        {
+            return (null, "the media file path is unknown");
+        }
+
+        var cues = await packetTimings.ReadAsync(item.Path, stream.Index, cancellationToken).ConfigureAwait(false);
+
+        return cues is null
+            ? (null, "ffprobe could not list its packets")
+            : (cues, string.Empty);
     }
 
     /// <summary>

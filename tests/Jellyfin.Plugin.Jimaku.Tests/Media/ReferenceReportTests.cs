@@ -32,12 +32,12 @@ public class ReferenceReportTests
     }
 
     [Fact]
-    public void ImageBasedTracksAreNamedAsTheReason()
+    public void ImageBasedTracksAreNamedWhenTheirTimingsCouldNotBeReadEither()
     {
-        // The case that catches people out. A PGS track appears in Jellyfin's subtitle menu exactly
-        // like a text one, so the file looks well supplied with subtitles while offering nothing a
-        // timing comparison can read - and the old message said only "band-energy voice activity",
-        // which invited the reasonable but wrong guess that a signs track had been picked.
+        // Reaching this at all now means two things failed: the track carries no text, and reading
+        // its packet timings did not work. The timings alone would have been enough - alignment
+        // never looks at what a cue says - so saying "image-based" without that qualifier would
+        // misattribute the failure.
         var report = new ReferenceReport { FromSubtitles = false };
         report.Streams.Add(new ReferenceStreamInfo { Index = 2, Codec = "pgssub", IsText = false });
         report.Streams.Add(new ReferenceStreamInfo { Index = 3, Codec = "pgssub", IsText = false });
@@ -59,7 +59,7 @@ public class ReferenceReportTests
 
         var explanation = report.Explain();
 
-        Assert.Contains("1 text subtitle track(s) could be read", explanation, StringComparison.Ordinal);
+        Assert.Contains("1 embedded subtitle track(s) could be read", explanation, StringComparison.Ordinal);
         Assert.DoesNotContain("image-based", explanation, StringComparison.Ordinal);
     }
 

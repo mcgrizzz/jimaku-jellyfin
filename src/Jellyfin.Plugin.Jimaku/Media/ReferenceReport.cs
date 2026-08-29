@@ -99,22 +99,17 @@ public sealed class ReferenceReport
                 return "This file has no embedded subtitle track at all, so the timing had to be compared against voice activity in the audio.";
             }
 
-            var text = streams.Count(s => s.IsText);
-            if (text == 0)
-            {
-                // The distinction worth spelling out. These tracks appear in Jellyfin's subtitle
-                // menu like any other, so the file looks well supplied while offering nothing a
-                // timing comparison can read.
-                return string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"This file's {streams.Count} embedded subtitle track(s) are all image-based (picture subtitles such as PGS), which carry no readable timings. The comparison fell back to voice activity in the audio.");
-            }
-
             if (!streams.Any(s => s.CueCount > 0))
             {
-                return string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"None of this file's {text} text subtitle track(s) could be read, so the comparison fell back to voice activity in the audio.");
+                var text = streams.Count(s => s.IsText);
+
+                return text == 0
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"This file's {streams.Count} embedded subtitle track(s) are all image-based, and their packet timings could not be read either, so the comparison fell back to voice activity in the audio.")
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"None of this file's {streams.Count} embedded subtitle track(s) could be read, so the comparison fell back to voice activity in the audio.");
             }
 
             return "The embedded subtitle tracks could not be used, so the comparison fell back to voice activity in the audio.";

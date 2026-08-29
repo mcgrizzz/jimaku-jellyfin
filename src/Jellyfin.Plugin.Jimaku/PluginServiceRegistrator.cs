@@ -83,6 +83,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         serviceCollection.AddSingleton<AnimeIdResolver>();
         serviceCollection.AddSingleton<FfmpegRunner>();
+        serviceCollection.AddSingleton<SubtitlePacketTimings>();
         serviceCollection.AddSingleton<EmbeddedSubtitleReferenceProvider>();
         serviceCollection.AddSingleton<AudioActivityReferenceProvider>();
         serviceCollection.AddSingleton<ReferenceTrackResolver>();

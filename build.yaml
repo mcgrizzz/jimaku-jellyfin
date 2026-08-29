@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 21
+version: 22
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,15 +16,10 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Read embedded subtitle tracks straight from the item instead of through a media source. When
-    resolving that source failed, the whole search gave up before listing anything, so a file full
-    of subtitle tracks reported having none - and said so only at debug level.
-  - Fall back to extracting by stream index when extraction by path fails, so one broken route no
-    longer costs the reference entirely.
-  - Use Jellyfin's own definition of a text subtitle track rather than a list of codec names, which
-    could be defeated by a spelling this plugin had not seen.
-  - Log the reason each track could not be read at warning level, and show it per track. Every one
-    of these failing is the most likely reason a file with good subtitles falls back to audio, and
-    it was invisible.
-  - Name image-based tracks as the cause when they are. A PGS track appears in Jellyfin's subtitle
-    menu like any other, so a file can look well supplied while carrying nothing readable.
+  - Use image-based subtitle tracks as a timing reference. A PGS or VobSub track carries no text,
+    but every display set has a presentation timestamp, so its timings are stated outright in the
+    packet headers - and timings are the only thing alignment ever uses. Disc rips, which most
+    often carry nothing but picture subtitles, are also where the audio fallback is weakest.
+  - Read those timings with ffprobe alone: packet headers, no decoding and nothing written to disk.
+    Erase segments are folded into the cue they end rather than counted as cues of their own, which
+    would otherwise have doubled the cue count and halved every gap.

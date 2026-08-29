@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.21.0",
+                "changelog": "- Use image-based subtitle tracks as a timing reference. A PGS or VobSub track carries no text,\n  but every display set has a presentation timestamp, so its timings are stated outright in the\n  packet headers - and timings are the only thing alignment ever uses. Disc rips, which most\n  often carry nothing but picture subtitles, are also where the audio fallback is weakest.\n- Read those timings with ffprobe alone: packet headers, no decoding and nothing written to disk.\n  Erase segments are folded into the cue they end rather than counted as cues of their own, which\n  would otherwise have doubled the cue count and halved every gap.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.21.0.zip",
+                "checksum": "6789e4db619383c65f39a1f7b33c3f78",
+                "timestamp": "2026-08-29T16:19:35Z"
+            },
+            {
                 "version": "1.0.20.0",
                 "changelog": "- Read embedded subtitle tracks straight from the item instead of through a media source. When\n  resolving that source failed, the whole search gave up before listing anything, so a file full\n  of subtitle tracks reported having none - and said so only at debug level.\n- Fall back to extracting by stream index when extraction by path fails, so one broken route no\n  longer costs the reference entirely.\n- Use Jellyfin's own definition of a text subtitle track rather than a list of codec names, which\n  could be defeated by a spelling this plugin had not seen.\n- Log the reason each track could not be read at warning level, and show it per track. Every one\n  of these failing is the most likely reason a file with good subtitles falls back to audio, and\n  it was invisible.\n- Name image-based tracks as the cause when they are. A PGS track appears in Jellyfin's subtitle\n  menu like any other, so a file can look well supplied while carrying nothing readable.",
                 "targetAbi": "10.11.0.0",
