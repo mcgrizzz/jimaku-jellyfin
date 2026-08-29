@@ -415,7 +415,9 @@ public sealed class JimakuSyncService(
             return result;
         }
 
-        var declined = SyncResult.Fail(BuildDeclineMessage(usable, reference));
+        var declined = SyncResult.Fail(
+            BuildDeclineMessage(usable, reference)
+            + Explain(episode, configuration));
         declined.Candidates = candidates;
         declined.ReferenceSource = reference?.Source ?? "none";
         await FinishAsync(episode, declined, options, cancellationToken).ConfigureAwait(false);
@@ -785,7 +787,10 @@ public sealed class JimakuSyncService(
         // on its own it quietly favours the sparser file, whose fewer cues have less to disagree
         // with. Correlation and uniqueness stay in the score to break ties and to keep a
         // well-covered but mistimed file from winning.
-        var coverage = Math.Round(alignment.Coverage, 2);
+        // A reference with no cue structure yields no coverage figure. Treating that as zero would
+        // rank every candidate identically on the term that leads the score, so fall back to
+        // correlation carrying the decision on its own.
+        var coverage = Math.Round(alignment.Coverage ?? 0, 2);
         var correlation = Math.Round(alignment.Correlation, 2) / 10.0;
         var uniqueness = Math.Min(alignment.PeakRatio, 5.0) / 1000.0;
 
@@ -812,6 +817,22 @@ public sealed class JimakuSyncService(
         SubtitleLanguages.Multilingual => 1,
         _ => 2,
     };
+
+    /// <summary>
+    /// Adds a sentence about the reference when the reference is the likely problem.
+    /// </summary>
+    /// <remarks>
+    /// Every candidate failing by a wide margin usually says more about what they were compared
+    /// against than about the subtitles, and the numbers alone do not distinguish the two. Naming
+    /// the reason turns "declined all six" into something that can be acted on.
+    /// </remarks>
+    private string Explain(Episode episode, PluginConfiguration configuration)
+    {
+        var report = referenceResolver.PeekReport(episode.Id);
+        var explanation = report?.Explain() ?? string.Empty;
+
+        return explanation.Length > 0 ? " " + explanation : string.Empty;
+    }
 
     private static string BuildDeclineMessage(List<SubtitleCandidate> usable, ReferenceTrack? reference)
     {
@@ -978,6 +999,22 @@ public sealed class JimakuSyncService(
     /// <returns>The paths on disk.</returns>
     public IReadOnlyList<string> FindSidecars(Episode episode, string languageTag) =>
         sidecarWriter.FindExisting(episode, languageTag);
+
+    /// <summary>
+    /// Reports what the plugin compares an episode's subtitles against, and why that.
+    /// </summary>
+    /// <param name="episode">The episode.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The account.</returns>
+    public Task<Media.ReferenceReport> ExplainReferenceAsync(Episode episode, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(episode);
+
+        return referenceResolver.ExplainAsync(
+            episode,
+            Configuration.EnableAudioFallback,
+            cancellationToken);
+    }
 
     /// <summary>
     /// Puts previously rejected files back on the table for an episode.

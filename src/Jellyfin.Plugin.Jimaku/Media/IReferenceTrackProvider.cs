@@ -13,7 +13,8 @@ public interface IReferenceTrackProvider
     /// Attempts to build a reference track.
     /// </summary>
     /// <param name="item">The media item.</param>
+    /// <param name="report">Receives an account of what was considered and why.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The reference, or null when this provider cannot supply one.</returns>
-    Task<ReferenceTrack?> TryGetAsync(BaseItem item, CancellationToken cancellationToken);
+    Task<ReferenceTrack?> TryGetAsync(BaseItem item, ReferenceReport report, CancellationToken cancellationToken);
 }

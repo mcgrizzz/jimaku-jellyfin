@@ -40,10 +40,23 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 
     private static readonly string[] TextCodecs = ["subrip", "srt", "ass", "ssa", "mov_text", "text", "webvtt"];
 
+    /// <summary>
+    /// Title words that mark a track as annotation rather than dialogue.
+    /// </summary>
+    /// <remarks>
+    /// A signs and songs track cues on title cards and lyrics, not speech, so aligning a dialogue
+    /// subtitle against it compares two different things and produces a flat correlation surface.
+    /// It is only demoted, never discarded: on a file that has nothing else it is still structure,
+    /// and the consensus vote already treats a lone track as unconfirmed.
+    /// </remarks>
+    private static readonly string[] AnnotationMarkers =
+        ["sign", "song", "s&s", "lyric", "karaoke", "credit", "commentary", "forced"];
+
     /// <inheritdoc />
-    public async Task<ReferenceTrack?> TryGetAsync(BaseItem item, CancellationToken cancellationToken)
+    public async Task<ReferenceTrack?> TryGetAsync(BaseItem item, ReferenceReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(report);
 
         MediaSourceInfo? source;
         try
@@ -57,6 +70,8 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             logger.LogDebug(ex, "Could not resolve a media source for {Path}.", item.Path);
             return null;
         }
+
+        Describe(source, report);
 
         var streams = SelectStreams(source);
         if (streams.Count == 0)
@@ -80,11 +95,40 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var info = report.Streams.Find(s => s.Index == candidate.Index);
             var parsed = await TryReadCuesAsync(candidate, source!, item, cancellationToken).ConfigureAwait(false);
-            if (parsed is not null && parsed.Count >= MinimumCues)
+
+            if (parsed is null)
             {
-                tracks.Add((candidate, parsed));
+                if (info is not null)
+                {
+                    info.Status = "could not be extracted";
+                }
+
+                continue;
             }
+
+            if (info is not null)
+            {
+                info.CueCount = parsed.Count;
+            }
+
+            if (parsed.Count < MinimumCues)
+            {
+                if (info is not null)
+                {
+                    info.Status = "too few cues to align against";
+                }
+
+                continue;
+            }
+
+            if (info is not null)
+            {
+                info.Status = "compared";
+            }
+
+            tracks.Add((candidate, parsed));
         }
 
         if (tracks.Count == 0)
@@ -94,6 +138,13 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         }
 
         var (bestStream, bestTrack, agreement) = SelectConsensus(tracks, item);
+
+        var chosenInfo = report.Streams.Find(s => s.Index == bestStream.Index);
+        if (chosenInfo is not null)
+        {
+            chosenInfo.Used = true;
+            chosenInfo.Status = "used as the timing reference";
+        }
 
         logger.LogInformation(
             "Timing reference for {Path}: embedded stream {Index} ({Language} {Codec}), {Count} cues, agreeing with {Agreement} of {Total} tracks.",
@@ -113,6 +164,17 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         var description = tracks.Count > 1
             ? $"embedded {language} subtitles ({bestTrack.Count} cues, agreeing with {agreement}/{tracks.Count - 1} other tracks)"
             : $"embedded {language} subtitles ({bestTrack.Count} cues)";
+
+        report.Chosen = description;
+        report.FromSubtitles = true;
+
+        if (IsAnnotation(bestStream))
+        {
+            // Said out loud rather than left to be inferred from a weak correlation: this is the
+            // one case where the reference itself is the likely problem.
+            report.Note =
+                "The only usable track looks like a signs and songs track, which cues on title cards rather than speech. Timing measured against it is unreliable.";
+        }
 
         return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true, bestTrack);
     }
@@ -193,6 +255,52 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         return (tracks[bestIndex].Stream, tracks[bestIndex].Cues, agreement[bestIndex]);
     }
 
+    /// <summary>
+    /// Records every embedded subtitle stream and why it is or is not a candidate, before any of
+    /// them are read.
+    /// </summary>
+    private static void Describe(MediaSourceInfo? source, ReferenceReport report)
+    {
+        if (source?.MediaStreams is null)
+        {
+            return;
+        }
+
+        foreach (var stream in source.MediaStreams.Where(s => s.Type == MediaStreamType.Subtitle && !s.IsExternal))
+        {
+            var isText = stream.Codec is not null
+                && TextCodecs.Contains(stream.Codec, StringComparer.OrdinalIgnoreCase);
+
+            report.Streams.Add(new ReferenceStreamInfo
+            {
+                Index = stream.Index,
+                Codec = stream.Codec ?? "unknown",
+                Language = string.IsNullOrEmpty(stream.Language) ? "und" : stream.Language,
+                Title = stream.Title ?? string.Empty,
+                IsForced = stream.IsForced,
+
+                // Image-based tracks are the common case on disc rips and cannot be read as text at
+                // all, which is worth stating: it is the usual reason a file with several subtitle
+                // tracks still ends up on the audio fallback.
+                Status = isText
+                    ? "available"
+                    : $"image-based ({stream.Codec ?? "unknown"}), which carries no readable timings",
+            });
+        }
+    }
+
+    private static bool IsAnnotation(MediaStream stream)
+    {
+        if (stream.IsForced)
+        {
+            return true;
+        }
+
+        var title = stream.Title;
+        return !string.IsNullOrEmpty(title)
+            && AnnotationMarkers.Any(m => title.Contains(m, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static List<MediaStream> SelectStreams(MediaSourceInfo? source)
     {
         if (source?.MediaStreams is null)
@@ -200,10 +308,19 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             return [];
         }
 
-        return source.MediaStreams
+        var text = source.MediaStreams
             .Where(s => s.Type == MediaStreamType.Subtitle)
             .Where(s => !s.IsExternal)
             .Where(s => s.Codec is not null && TextCodecs.Contains(s.Codec, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        // Dialogue first. A signs and songs track cues on title cards and lyrics rather than
+        // speech, so it measures something different from the subtitle being checked - but it is
+        // sorted down rather than removed, because on a file that carries nothing else it is still
+        // the best structure available.
+        return text
+            .OrderBy(IsAnnotation)
+            .ThenByDescending(s => s.IsDefault)
             .ToList();
     }
 

@@ -17,6 +17,16 @@ public interface IVoiceActivityDetector : IDisposable
     /// <summary>Gets a short name for logging and display.</summary>
     string Name { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether this is a learned model rather than a signal heuristic.
+    /// </summary>
+    /// <remarks>
+    /// Worth distinguishing when reporting an outcome. Energy-based detection has very little to
+    /// work with on anime, where the score runs almost continuously, so a decline against it is
+    /// usually a statement about the reference rather than about the subtitle.
+    /// </remarks>
+    bool IsNeural { get; }
+
     /// <summary>Gets the sample rate the detector expects.</summary>
     int SampleRate { get; }
 

@@ -296,3 +296,55 @@ public class SeriesPreferenceDto
     /// <summary>Gets or sets when it last changed.</summary>
     public DateTimeOffset? UpdatedUtc { get; set; }
 }
+
+/// <summary>One embedded subtitle stream considered as a timing reference.</summary>
+public class ReferenceStreamDto
+{
+    /// <summary>Gets or sets the stream index within the container.</summary>
+    public int Index { get; set; }
+
+    /// <summary>Gets or sets the codec.</summary>
+    public string Codec { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the language tag.</summary>
+    public string Language { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the stream title, which is what usually reveals a signs track.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether the container flags it forced.</summary>
+    public bool IsForced { get; set; }
+
+    /// <summary>Gets or sets how many cues were read, when it was read.</summary>
+    public int CueCount { get; set; }
+
+    /// <summary>Gets or sets a value indicating whether this stream was used.</summary>
+    public bool Used { get; set; }
+
+    /// <summary>Gets or sets what happened to it.</summary>
+    public string Status { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// How the timing reference for an episode was arrived at.
+/// </summary>
+public class ReferenceReportDto
+{
+    /// <summary>Gets or sets what was used, or empty when nothing was.</summary>
+    public string Chosen { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether it came from embedded subtitles.</summary>
+    public bool FromSubtitles { get; set; }
+
+    /// <summary>Gets or sets an explanation of the outcome.</summary>
+    public string Note { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the audio stream analysed, when it came to that.</summary>
+    public string AudioTrack { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the voice activity detector used, when one was.</summary>
+    public string Detector { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets every subtitle stream that was considered.</summary>
+    public IReadOnlyList<ReferenceStreamDto> Streams { get; set; } = Array.Empty<ReferenceStreamDto>();
+}

@@ -30,7 +30,12 @@ public sealed class ReferenceTrackResolver(
 
     private readonly ConcurrentDictionary<Guid, CacheEntry> _cache = new();
 
-    private sealed record CacheEntry(string Path, long Stamp, ReferenceTrack? Track, DateTimeOffset CachedAt);
+    private sealed record CacheEntry(
+        string Path,
+        long Stamp,
+        ReferenceTrack? Track,
+        ReferenceReport Report,
+        DateTimeOffset CachedAt);
 
     /// <summary>
     /// Resolves a reference, preferring an embedded subtitle track and falling back to audio.
@@ -56,13 +61,51 @@ public sealed class ReferenceTrackResolver(
             return cached.Track;
         }
 
-        var reference = await BuildAsync(item, allowAudioFallback, cancellationToken).ConfigureAwait(false);
+        var report = new ReferenceReport();
+        var reference = await BuildAsync(item, allowAudioFallback, report, cancellationToken).ConfigureAwait(false);
 
         // A failure is worth caching too: without that, an episode with no usable reference pays
         // the full cost again on every candidate listing.
-        Store(item.Id, new CacheEntry(item.Path ?? string.Empty, stamp, reference, DateTimeOffset.UtcNow));
+        Store(item.Id, new CacheEntry(item.Path ?? string.Empty, stamp, reference, report, DateTimeOffset.UtcNow));
         return reference;
     }
+
+    /// <summary>
+    /// Builds - or reuses - the account of how an item's reference was arrived at.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="ResolveAsync"/> so the question "what did it compare against, and
+    /// why that" can be asked directly rather than inferred from a decline message.
+    /// </remarks>
+    /// <param name="item">The media item.</param>
+    /// <param name="allowAudioFallback">Whether audio analysis may be used.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The account.</returns>
+    public async Task<ReferenceReport> ExplainAsync(
+        BaseItem item,
+        bool allowAudioFallback,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var stamp = MediaStamp(item);
+        if (_cache.TryGetValue(item.Id, out var cached) &&
+            string.Equals(cached.Path, item.Path, StringComparison.Ordinal) &&
+            cached.Stamp == stamp)
+        {
+            return cached.Report;
+        }
+
+        await ResolveAsync(item, allowAudioFallback, cancellationToken).ConfigureAwait(false);
+
+        return _cache.TryGetValue(item.Id, out var built) ? built.Report : new ReferenceReport();
+    }
+
+    /// <summary>Returns the cached account for an item, without building one.</summary>
+    /// <param name="itemId">The item ID.</param>
+    /// <returns>The account, or null when nothing is cached.</returns>
+    public ReferenceReport? PeekReport(Guid itemId) =>
+        _cache.TryGetValue(itemId, out var cached) ? cached.Report : null;
 
     /// <summary>Forgets any cached reference for an item.</summary>
     /// <param name="itemId">The item ID.</param>
@@ -71,9 +114,10 @@ public sealed class ReferenceTrackResolver(
     private async Task<ReferenceTrack?> BuildAsync(
         BaseItem item,
         bool allowAudioFallback,
+        ReferenceReport report,
         CancellationToken cancellationToken)
     {
-        var reference = await embedded.TryGetAsync(item, cancellationToken).ConfigureAwait(false);
+        var reference = await embedded.TryGetAsync(item, report, cancellationToken).ConfigureAwait(false);
         if (reference is not null)
         {
             return reference;
@@ -84,11 +128,13 @@ public sealed class ReferenceTrackResolver(
             logger.LogDebug(
                 "{Path} has no embedded subtitle track and the audio fallback is disabled.",
                 item.Path);
+
+            report.Note = "No embedded subtitle track could be used, and the audio fallback is turned off.";
             return null;
         }
 
         logger.LogDebug("Falling back to audio analysis for {Path}.", item.Path);
-        return await audio.TryGetAsync(item, cancellationToken).ConfigureAwait(false);
+        return await audio.TryGetAsync(item, report, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

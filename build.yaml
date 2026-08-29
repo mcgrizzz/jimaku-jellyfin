@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 19
+version: 20
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,14 +16,15 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Bring episodes synced by earlier versions into the new tracking. Those records held only the
-    last outcome, so the sidecar was never cleaned up when replaced, deleting it taught nothing and
-    the reject action reported that nothing was attached.
-  - Discard release-group preferences learned before automatic picks stopped counting. A preference
-    a sweep confirmed for itself is circular rather than weak, and there is no record of which
-    confirmations were yours, so it is dropped and rebuilds from your own picks. Cached Jimaku
-    searches are kept.
-  - Show a series' preferred group on its episode list, with how much stands behind it and a button
-    to forget it.
-  - Add "replace subtitles that are already there" to the series and season sweeps, so a season can
-    be redone once you have picked the right group by hand.
+  - Say what the timing was compared against. A new per-episode view lists every embedded subtitle
+    track, whether it could be read, how many cues it had and which one was used - so an episode
+    whose tracks are all image-based is no longer indistinguishable from one where a signs track
+    was picked.
+  - Explain a decline caused by the reference rather than the subtitles. When the comparison fell
+    back to voice activity, the message now says why, and that energy-based detection is weak for
+    anime.
+  - Stop reporting "covers 0% of dialogue" when coverage could not be measured at all. A voice
+    activity reference has no cue structure to compare against, and zero read as a verdict on the
+    subtitle.
+  - Sort signs and songs tracks below dialogue when choosing a reference, and say so when one is
+    all that is available.

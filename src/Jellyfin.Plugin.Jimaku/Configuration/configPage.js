@@ -180,6 +180,8 @@ function loadEpisodes(view, seriesId, seriesName) {
                     <span>Show candidates</span></button>
                 <button is="emby-button" type="button" class="raised jimaku-history" data-id="${item.Id}">
                     <span>What's attached?</span></button>
+                <button is="emby-button" type="button" class="raised jimaku-reference" data-id="${item.Id}">
+                    <span>What's it comparing to?</span></button>
             </div>`;
         }
 
@@ -270,7 +272,9 @@ function renderCandidates(view, candidates, itemId) {
             ? `<div><strong>${escapeHtml(c.Verdict)}</strong>` +
               ` &middot; r ${Number(c.Correlation).toFixed(2)}` +
               ` &middot; uniqueness ${Number(c.PeakRatio).toFixed(2)}` +
-              (c.Coverage != null ? ` &middot; covers ${(c.Coverage * 100).toFixed(0)}% of dialogue` : '') +
+              (c.Coverage != null
+                  ? ` &middot; covers ${(c.Coverage * 100).toFixed(0)}% of dialogue`
+                  : ' &middot; coverage not measurable against this reference') +
               (c.OnScreenRatio != null ? ` &middot; on screen ${(c.OnScreenRatio * 100).toFixed(0)}%` : '') +
               (c.Correction && c.Correction !== 'unchanged' ? ` &middot; ${escapeHtml(c.Correction)}` : '') +
               `</div><div style="opacity:0.75;font-size:0.9em;">${escapeHtml(c.TimingNotes || '')}</div>`
@@ -460,6 +464,52 @@ function renderHistory(view, itemId, history) {
     container.innerHTML = html;
 }
 
+function renderReference(view, report) {
+    const host = view.querySelector('#ReferenceResults');
+
+    let html = `<div style="margin-bottom:0.5em;"><strong>Compared against:</strong> `
+        + `${escapeHtml(report.Chosen || 'nothing usable')}`
+        + (report.FromSubtitles ? '' : ' <span style="opacity:0.75;">(weaker than an embedded subtitle track)</span>')
+        + '</div>';
+
+    if (report.Note) {
+        html += `<div class="fieldDescription" style="margin-bottom:0.5em;">${escapeHtml(report.Note)}</div>`;
+    }
+
+    const streams = report.Streams || [];
+    if (streams.length) {
+        html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;">'
+             + '<th style="padding-right:0.75em;">Track</th><th style="padding:0 0.75em;">Codec</th>'
+             + '<th style="padding:0 0.75em;">Cues</th><th style="padding:0 0.75em;">Used for timing</th>'
+             + '</tr></thead><tbody>'
+             + streams.map(t => `<tr style="vertical-align:top;${t.Used ? 'font-weight:600;' : 'opacity:0.75;'}">
+                    <td style="padding:0.2em 0.75em 0.2em 0;">#${t.Index} ${escapeHtml(t.Language)}
+                        ${t.Title ? '<span style="opacity:0.8;"> &middot; ' + escapeHtml(t.Title) + '</span>' : ''}
+                        ${t.IsForced ? ' <span style="opacity:0.8;">[forced]</span>' : ''}</td>
+                    <td style="padding:0.2em 0.75em;">${escapeHtml(t.Codec)}</td>
+                    <td style="padding:0.2em 0.75em;">${t.CueCount || '—'}</td>
+                    <td style="padding:0.2em 0.75em;">${escapeHtml(t.Status)}</td>
+                  </tr>`).join('')
+             + '</tbody></table>';
+    } else {
+        html += '<p class="fieldDescription">This file carries no embedded subtitle tracks.</p>';
+    }
+
+    host.innerHTML = html;
+}
+
+function loadReference(view, itemId) {
+    const host = view.querySelector('#ReferenceResults');
+    host.innerHTML = '<p class="fieldDescription">Reading the media\u2019s tracks\u2026</p>';
+
+    return ApiClient.ajax({
+        type: 'GET',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Reference`),
+        dataType: 'json'
+    }).then(report => renderReference(view, report))
+      .catch(err => showError(view, err));
+}
+
 function loadHistory(view, itemId) {
     return ApiClient.ajax({
         type: 'GET',
@@ -493,7 +543,11 @@ function runAuto(view, itemId) {
         type: 'POST',
         url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Auto`),
         dataType: 'json'
-    }).then(result => { renderResult(view, result); return loadHistory(view, itemId); })
+    }).then(result => {
+        renderResult(view, result);
+        if (!result.Applied) { loadReference(view, itemId); }
+        return loadHistory(view, itemId);
+    })
       .catch(err => showError(view, err));
 }
 
@@ -623,6 +677,13 @@ export default function (view) {
                 clear.dataset.id,
                 `Jellyfin.Plugin.Jimaku/Episodes/${clear.dataset.id}/ClearRejections`,
                 'Clearing…');
+            return;
+        }
+
+        const showReference = e.target.closest('.jimaku-reference');
+        if (showReference) {
+            view.querySelector('#CandidateResults').innerHTML = '';
+            loadReference(view, showReference.dataset.id);
             return;
         }
 

@@ -243,6 +243,52 @@ public class JimakuController(
     }
 
     /// <summary>
+    /// Reports what an episode's subtitles are compared against, and why that was chosen.
+    /// </summary>
+    /// <remarks>
+    /// The reference is the usual explanation for a run of declines, and it was previously
+    /// invisible: a decline named the method but not the track, so there was no way to tell an
+    /// episode with no readable subtitle tracks from one where a signs track had been picked.
+    /// </remarks>
+    /// <param name="itemId">The episode's item ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The account.</returns>
+    [HttpGet("Jellyfin.Plugin.Jimaku/Episodes/{itemId}/Reference")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ReferenceReportDto>> GetReference(
+        [FromRoute] Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        if (libraryManager.GetItemById(itemId) is not Episode episode)
+        {
+            return NotFound("That item is not an episode.");
+        }
+
+        var report = await syncService.ExplainReferenceAsync(episode, cancellationToken).ConfigureAwait(false);
+
+        return Ok(new ReferenceReportDto
+        {
+            Chosen = report.Chosen,
+            FromSubtitles = report.FromSubtitles,
+            Note = report.Explain() is { Length: > 0 } explanation ? explanation : report.Note,
+            AudioTrack = report.AudioTrack,
+            Detector = report.Detector,
+            Streams = report.Streams.Select(s => new ReferenceStreamDto
+            {
+                Index = s.Index,
+                Codec = s.Codec,
+                Language = s.Language,
+                Title = s.Title,
+                IsForced = s.IsForced,
+                CueCount = s.CueCount,
+                Used = s.Used,
+                Status = s.Status,
+            }).ToList(),
+        });
+    }
+
+    /// <summary>
     /// Reports which release group a series has settled on, and how much stands behind it.
     /// </summary>
     /// <param name="seriesId">The series' item ID.</param>

@@ -50,6 +50,9 @@ public sealed class BandEnergyVoiceActivityDetector : IVoiceActivityDetector
     public string Name => "band-energy";
 
     /// <inheritdoc />
+    public bool IsNeural => false;
+
+    /// <inheritdoc />
     public int SampleRate => Rate;
 
     /// <inheritdoc />

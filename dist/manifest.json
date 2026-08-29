@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.19.0",
+                "changelog": "- Say what the timing was compared against. A new per-episode view lists every embedded subtitle\n  track, whether it could be read, how many cues it had and which one was used - so an episode\n  whose tracks are all image-based is no longer indistinguishable from one where a signs track\n  was picked.\n- Explain a decline caused by the reference rather than the subtitles. When the comparison fell\n  back to voice activity, the message now says why, and that energy-based detection is weak for\n  anime.\n- Stop reporting \"covers 0% of dialogue\" when coverage could not be measured at all. A voice\n  activity reference has no cue structure to compare against, and zero read as a verdict on the\n  subtitle.\n- Sort signs and songs tracks below dialogue when choosing a reference, and say so when one is\n  all that is available.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.19.0.zip",
+                "checksum": "4044f135775100014247dc6d86fbb073",
+                "timestamp": "2026-08-29T16:04:41Z"
+            },
+            {
                 "version": "1.0.18.0",
                 "changelog": "- Bring episodes synced by earlier versions into the new tracking. Those records held only the\n  last outcome, so the sidecar was never cleaned up when replaced, deleting it taught nothing and\n  the reject action reported that nothing was attached.\n- Discard release-group preferences learned before automatic picks stopped counting. A preference\n  a sweep confirmed for itself is circular rather than weak, and there is no record of which\n  confirmations were yours, so it is dropped and rebuilds from your own picks. Cached Jimaku\n  searches are kept.\n- Show a series' preferred group on its episode list, with how much stands behind it and a button\n  to forget it.\n- Add \"replace subtitles that are already there\" to the series and season sweeps, so a season can\n  be redone once you have picked the right group by hand.",
                 "targetAbi": "10.11.0.0",

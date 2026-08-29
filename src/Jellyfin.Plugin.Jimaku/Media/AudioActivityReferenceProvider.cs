@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -29,12 +30,15 @@ public sealed class AudioActivityReferenceProvider(
     ILogger<AudioActivityReferenceProvider> logger) : IReferenceTrackProvider
 {
     /// <inheritdoc />
-    public async Task<ReferenceTrack?> TryGetAsync(BaseItem item, CancellationToken cancellationToken)
+    public async Task<ReferenceTrack?> TryGetAsync(BaseItem item, ReferenceReport report, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(item);
 
+        ArgumentNullException.ThrowIfNull(report);
+
         if (!ffmpeg.IsAvailable)
         {
+            report.Note = "ffmpeg is not available, so the audio could not be analysed either.";
             return null;
         }
 
@@ -54,11 +58,17 @@ public sealed class AudioActivityReferenceProvider(
         var stream = SelectAudioStream(source);
         if (stream is null)
         {
+            report.Note = "This file has no audio stream to analyse.";
             return null;
         }
 
+        report.AudioTrack = string.Create(
+            CultureInfo.InvariantCulture,
+            $"stream {stream.Index} ({stream.Language ?? "und"} {stream.Codec})");
+
         using var detector = detectorFactory.Create();
         detector.Reset();
+        report.Detector = detector.Name;
 
         var probabilities = new List<float>(4096);
         var frameSeconds = (double)detector.FrameSamples / detector.SampleRate;
@@ -99,6 +109,10 @@ public sealed class AudioActivityReferenceProvider(
                 "Voice activity analysis of {Path} produced a {Duty:P0} duty cycle, which is too uniform to align against.",
                 item.Path,
                 duty);
+
+            report.Note = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Voice activity analysis found speech {duty:P0} of the time, which is too uniform to align against.");
             return null;
         }
 
@@ -109,7 +123,24 @@ public sealed class AudioActivityReferenceProvider(
             probabilities.Count,
             duty);
 
-        return new ReferenceTrack(signal, $"{detector.Name} voice activity", false);
+        var description = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{detector.Name} voice activity on audio {report.AudioTrack}");
+
+        report.Chosen = description;
+        report.FromSubtitles = false;
+
+        // Worth saying plainly rather than leaving to be inferred from a low correlation. Anime is
+        // scored almost continuously, so energy-based detection has very little silence to key on -
+        // this is the weakest reference the plugin has, and a decline against it usually means the
+        // reference was poor rather than the subtitle wrong.
+        if (!detector.IsNeural)
+        {
+            report.Note =
+                "Energy-based detection is unreliable for anime, where a near-continuous score leaves little silence to key on. A neural model (Silero) gives a far better reference.";
+        }
+
+        return new ReferenceTrack(signal, description, false);
     }
 
     private static MediaStream? SelectAudioStream(MediaSourceInfo? source)

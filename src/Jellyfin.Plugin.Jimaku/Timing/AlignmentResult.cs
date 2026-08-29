@@ -36,10 +36,16 @@ public sealed class AlignmentResult
     /// Gets or sets the fraction of reference cues this subtitle also marks. A well-aligned but
     /// incomplete subtitle scores well on correlation and poorly here.
     /// </summary>
-    public double Coverage { get; set; }
+    /// <remarks>
+    /// Null when it could not be measured, which is the case for a voice-activity reference: that
+    /// has no cue structure to compare against. Reporting it as zero read as "covers none of the
+    /// dialogue", which is a damning claim about the subtitle when the truth is that nothing was
+    /// measured.
+    /// </remarks>
+    public double? Coverage { get; set; }
 
     /// <summary>Gets or sets the share of the runtime this subtitle has something on screen.</summary>
-    public double OnScreenRatio { get; set; }
+    public double? OnScreenRatio { get; set; }
 
     /// <summary>
     /// Gets or sets the per-block offsets when <see cref="Verdict"/> is

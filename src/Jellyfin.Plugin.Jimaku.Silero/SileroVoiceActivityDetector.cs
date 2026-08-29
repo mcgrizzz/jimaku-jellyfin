@@ -70,6 +70,9 @@ public sealed class SileroVoiceActivityDetector : IVoiceActivityDetector
     public string Name => "silero";
 
     /// <inheritdoc />
+    public bool IsNeural => true;
+
+    /// <inheritdoc />
     public int SampleRate => Rate;
 
     /// <inheritdoc />
