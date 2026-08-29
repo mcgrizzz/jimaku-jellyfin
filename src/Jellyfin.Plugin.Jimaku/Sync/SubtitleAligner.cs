@@ -136,6 +136,22 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
                 result.Verdict = SyncVerdict.PiecewiseCut;
                 result.Blocks = split.Blocks;
                 result.Correlation = split.Correlation;
+
+                // Re-measure against the correction actually being applied. The figure computed
+                // earlier used the global fit, which for a differently-cut subtitle is wrong for
+                // most of the file - and coverage leads the ranking between candidates.
+                if (reference.Cues is { Count: > 0 } splitReference)
+                {
+                    var splitCoverage = CueCoverage.Measure(
+                        splitReference,
+                        probe,
+                        split.Blocks,
+                        reference.Signal.DurationSeconds);
+
+                    result.Coverage = splitCoverage.ReferenceCovered;
+                    result.OnScreenRatio = splitCoverage.OnScreenRatio;
+                }
+
                 result.Reason = string.Create(
                     CultureInfo.InvariantCulture,
                     $"Matched a different cut: {split.Blocks.Count} sections, offsets {string.Join(", ", split.Blocks.Select(b => b.OffsetSeconds.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)))}s.");

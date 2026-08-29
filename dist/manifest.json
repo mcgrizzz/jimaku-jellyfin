@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.24.0",
+                "changelog": "- Measure coverage against the correction actually being applied. For a subtitle corrected in\n  sections it was measured against the global fit, which is wrong for most of the file by\n  construction - so a genuinely differently-cut subtitle read as covering far less dialogue than\n  it does, and coverage leads the ranking. The decision was going to whichever file a single\n  offset could explain, however badly.\n- Prefer subtitles released against the same source as the local file. Broadcast and disc\n  releases are routinely cut differently, which is why two subtitles for one episode can want\n  offsets a second apart. This was already detected and used to make the piecewise aligner try\n  harder, but had no say in which candidate was chosen. It only breaks a close call.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.24.0.zip",
+                "checksum": "750ded7040bcf170e4497cd6e4a21033",
+                "timestamp": "2026-08-29T19:05:05Z"
+            },
+            {
                 "version": "1.0.23.0",
                 "changelog": "- Expose the two limits governing differing-cut matching: how many sections a subtitle may be\n  split into, and how few lines a section may contain. Both were only reachable by editing the\n  configuration file.",
                 "targetAbi": "10.11.0.0",

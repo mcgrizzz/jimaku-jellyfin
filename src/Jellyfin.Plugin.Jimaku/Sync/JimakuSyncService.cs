@@ -382,7 +382,12 @@ public sealed class JimakuSyncService(
 
         if (acceptable.Count > 0)
         {
-            var chosen = ApplySeriesPreference(episode, acceptable, options, configuration);
+            // Priors, weakest first, each allowed to overturn the measurement only within a
+            // bounded margin. A release from the same source as the local file is evidence about
+            // the cut; a group the user has chosen repeatedly is evidence about their judgement,
+            // and outranks it.
+            var chosen = PreferMatchingSource(episode, acceptable, acceptable[0], configuration);
+            chosen = ApplySeriesPreference(episode, acceptable, chosen, options, configuration);
             var (candidate, document, fileName) = chosen;
 
             if (measured.Count > 1)
@@ -435,14 +440,62 @@ public sealed class JimakuSyncService(
     /// a decision inside a configured tolerance - and never one that would swap a Japanese-only
     /// file for a bilingual release.
     /// </remarks>
+    /// <summary>
+    /// Prefers a subtitle released against the same kind of source as the local file.
+    /// </summary>
+    /// <remarks>
+    /// Broadcast and disc releases of the same episode are routinely cut differently - an extra
+    /// recap, a different opening placement, a few seconds either side - so a subtitle timed for a
+    /// web stream is a poor fit for a Blu-Ray however well its cue starts happen to correlate.
+    /// This was already detected for the filename score and used to make the piecewise aligner try
+    /// harder, but it had no say in which candidate was chosen.
+    /// </remarks>
+    private (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) PreferMatchingSource(
+        Episode episode,
+        List<(SubtitleCandidate Candidate, SubtitleDocument Document, string FileName)> ranked,
+        (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) chosen,
+        PluginConfiguration configuration)
+    {
+        if (!configuration.PreferMatchingSource || ranked.Count < 2 || !chosen.Candidate.NameMatch.SourceMismatch)
+        {
+            return chosen;
+        }
+
+        var index = ranked.FindIndex(m => !m.Candidate.NameMatch.SourceMismatch);
+        if (index < 0)
+        {
+            return chosen;
+        }
+
+        var matching = ranked[index];
+
+        if (LanguageRank(matching.Candidate.Languages) > LanguageRank(chosen.Candidate.Languages))
+        {
+            return chosen;
+        }
+
+        var sacrificed = Quality(chosen.Candidate) - Quality(matching.Candidate);
+        if (sacrificed > configuration.SourcePreferenceTolerance)
+        {
+            return chosen;
+        }
+
+        logger.LogInformation(
+            "Preferring {File} for {Name}: it was released against the same source as the local file, and measures within {Gap:0.000} of the best.",
+            matching.FileName,
+            episode.Name,
+            sacrificed);
+
+        return matching;
+    }
+
     private (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) ApplySeriesPreference(
         Episode episode,
         List<(SubtitleCandidate Candidate, SubtitleDocument Document, string FileName)> ranked,
+        (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) chosen,
         SyncOptions options,
         PluginConfiguration configuration)
     {
-        var chosen = ranked[0];
-
         if (!configuration.UseSeriesPreference || options.ForcedFile is not null || ranked.Count < 2)
         {
             return chosen;

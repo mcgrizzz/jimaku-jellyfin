@@ -224,6 +224,22 @@ public class PluginConfiguration : BasePluginConfiguration
     public double SeriesPreferenceTolerance { get; set; } = 0.05;
 
     /// <summary>
+    /// Gets or sets a value indicating whether to prefer a subtitle released against the same kind
+    /// of source as the local file - disc for a disc rip, broadcast for a web release.
+    /// </summary>
+    /// <remarks>
+    /// The strongest available predictor of a differing cut, and the reason two subtitles for the
+    /// same episode can want offsets a second apart. It only breaks a close call: a measurably
+    /// better match from the other source still wins.
+    /// </remarks>
+    public bool PreferMatchingSource { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how much measured quality the source preference may override.
+    /// </summary>
+    public double SourcePreferenceTolerance { get; set; } = 0.05;
+
+    /// <summary>
     /// Gets or sets how long a series' Jimaku entry list is reused before searching again, in
     /// hours. Zero disables the cache.
     /// </summary>

@@ -314,6 +314,17 @@
           </div>
 
           <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="PreferMatchingSource" />
+            <span>Prefer subtitles released against the same source as the file</span>
+          </label>
+          <div class="fieldDescription">
+            Broadcast and disc releases of the same episode are routinely cut differently, so a
+            subtitle timed for a web stream fits a Blu-Ray poorly however well its cue starts happen
+            to line up. This only breaks a close call &mdash; a measurably better match from the
+            other source still wins.
+          </div>
+
+          <label class="checkboxContainer">
             <input is="emby-checkbox" type="checkbox" id="UseSeriesPreference" />
             <span>Prefer the release group that already works for a series</span>
           </label>

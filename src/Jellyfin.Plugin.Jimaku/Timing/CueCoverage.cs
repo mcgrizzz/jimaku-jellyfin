@@ -38,6 +38,56 @@ public static class CueCoverage
     public const double DefaultToleranceSeconds = 0.5;
 
     /// <summary>
+    /// Compares a candidate against a reference, after applying a piecewise correction.
+    /// </summary>
+    /// <remarks>
+    /// Needed because coverage was being measured against the global fit even for candidates the
+    /// aligner had decided to correct in sections. For a differently-cut subtitle the global fit is
+    /// wrong for most of the file by construction, so its coverage read far lower than the truth -
+    /// and coverage leads the ranking. The effect was to hand the decision to whichever file could
+    /// be explained by a single offset, however badly, over one that genuinely matched in two.
+    /// </remarks>
+    /// <param name="reference">The reference cues.</param>
+    /// <param name="candidate">The candidate cues.</param>
+    /// <param name="blocks">The per-section corrections that would be applied.</param>
+    /// <param name="totalSeconds">Runtime, for the on-screen ratio.</param>
+    /// <param name="toleranceSeconds">Matching tolerance.</param>
+    /// <returns>The coverage measures.</returns>
+    public static CoverageResult Measure(
+        CueTrack reference,
+        CueTrack candidate,
+        IReadOnlyList<SplitBlock> blocks,
+        double totalSeconds,
+        double toleranceSeconds = DefaultToleranceSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(blocks);
+
+        if (blocks.Count == 0)
+        {
+            return Measure(reference, candidate, TimingTransform.Identity, totalSeconds, toleranceSeconds);
+        }
+
+        var shifted = new List<Cue>(candidate.Count);
+        var blockIndex = 0;
+
+        for (var i = 0; i < candidate.Count; i++)
+        {
+            while (blockIndex < blocks.Count - 1 && i > blocks[blockIndex].LastCueIndex)
+            {
+                blockIndex++;
+            }
+
+            var offset = blocks[blockIndex].OffsetSeconds;
+            var cue = candidate.Cues[i];
+            shifted.Add(new Cue(cue.StartSeconds + offset, cue.EndSeconds + offset));
+        }
+
+        return Measure(reference, new CueTrack(shifted), TimingTransform.Identity, totalSeconds, toleranceSeconds);
+    }
+
+    /// <summary>
     /// Compares a candidate against a reference, after applying a timing correction.
     /// </summary>
     /// <param name="reference">The reference cues.</param>
