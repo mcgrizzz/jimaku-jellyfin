@@ -220,11 +220,82 @@
             </div>
           </div>
 
-          <div class="selectContainer">
-            <label class="selectLabel" for="LibraryIds">Libraries to sweep</label>
-            <select is="emby-select" id="LibraryIds" multiple size="6"></select>
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="MaxEpisodesPerRun" step="1" min="0"
+                   label="Most episodes to attempt per run (0 for no limit)" />
+            <div class="fieldDescription">
+              Jimaku allows 25 requests a minute and the plugin waits rather than exceeding it, so a
+              sweep cannot break the limit &mdash; but a large library can keep it saturated for
+              hours. Capping the run spreads the work over successive days; each day resumes where
+              the last left off.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="OnlySweepEpisodesAddedWithinDays" step="1" min="0"
+                   label="Only sweep episodes added in the last (days, 0 for all)" />
+            <div class="fieldDescription">
+              After one full pass, the episodes worth revisiting are the new ones. Set this to turn
+              the daily sweep into a watch for newly added content.
+            </div>
+          </div>
+
+          <div class="inputContainer">
+            <label class="inputLabel" style="display:block;margin-bottom:0.4em;">Libraries to sweep</label>
+            <div id="LibraryIds" class="checkboxList"></div>
             <div class="fieldDescription">
               Select none to sweep everything. Narrow this if the server holds non-anime content.
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Notifications</legend>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="ShowClientNotifications" />
+            <span>Tell the client when a subtitle is attached</span>
+          </label>
+          <div class="fieldDescription">
+            Jellyfin's own subtitle dialog says "download queued" and then nothing. This pushes a
+            short message to the session that asked, once the work has actually finished. Clients
+            that do not support server messages simply ignore it.
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="WriteActivityLog" />
+            <span>Record outcomes in Dashboard &rarr; Activity</span>
+          </label>
+          <div class="fieldDescription">
+            Successes are always recorded. Declines are recorded only when you asked for them, so an
+            unattended sweep over a library Jimaku has little for does not drown the feed.
+          </div>
+        </fieldset>
+
+        <fieldset class="verticalSection">
+          <legend>Series memory</legend>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="UseSeriesPreference" />
+            <span>Prefer the release group that already works for a series</span>
+          </label>
+          <div class="fieldDescription">
+            Release groups are consistent across a season. Once several episodes have been served
+            correctly by the same group, later episodes prefer it &mdash; but only to break a close
+            call, never over a measurably better match.
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="SeriesPreferenceMinConfirmations" step="1" min="1"
+                   label="Successes needed before a preference is used" />
+          </div>
+
+          <div class="inputContainer">
+            <input is="emby-input" type="number" id="SeriesEntryCacheHours" step="1" min="0"
+                   label="Reuse a series' Jimaku search for (hours, 0 to disable)" />
+            <div class="fieldDescription">
+              Every episode of a series resolves to the same Jimaku entries, so searching per
+              episode spends the request budget re-asking a settled question.
             </div>
           </div>
         </fieldset>

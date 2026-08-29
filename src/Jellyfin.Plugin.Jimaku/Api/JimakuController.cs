@@ -99,6 +99,7 @@ public class JimakuController(
                 {
                     AllowPiecewise = configuration?.AllowPiecewiseOnDemand ?? true,
                     AllowAudioFallback = configuration?.EnableAudioFallback ?? true,
+                    Interactive = true,
                 },
                 cancellationToken).ConfigureAwait(false);
 
@@ -157,6 +158,7 @@ public class JimakuController(
                 ForcedEntryId = body.EntryId,
                 ForcedFile = new JimakuFile { Name = body.FileName, Url = body.Url },
                 ApplyEvenIfUnverified = body.ApplyEvenIfUnverified,
+                Interactive = true,
             },
             cancellationToken).ConfigureAwait(false);
 

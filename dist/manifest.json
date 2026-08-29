@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.15.0",
+                "changelog": "- Tell the client when a subtitle is actually attached. Jellyfin's own dialog says \"download\n  queued\" and then nothing; the plugin now sends its own message once the work is finished, and\n  records the outcome in Dashboard - Activity.\n- Remember which release group works for a series. Once several episodes have been served\n  correctly by the same group, later episodes prefer it - but only to break a close call, never\n  over a measurably better match.\n- Reuse a series' Jimaku search across its episodes. Searching once per episode spent half a\n  sweep's request budget re-asking a settled question.\n- Cap the scheduled sweep and run it newest-first, with an option to only look at recently added\n  episodes. The rate limit was always respected; a first run could still saturate it for hours.\n- Pick libraries to sweep with checkboxes. The multi-select gave no visible indication of what\n  was actually selected.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.15.0.zip",
+                "checksum": "4e1df38c4bf04e9a09b5091ad7a5f076",
+                "timestamp": "2026-08-29T14:58:07Z"
+            },
+            {
                 "version": "1.0.14.0",
                 "changelog": "- Choose the timing reference by agreement between the embedded tracks, not by cue count. The\n  densest track is often the group's own, carrying karaoke and signs and timed differently.\n- Rank candidates on how much dialogue they actually cover, not only on how well they align.\n  A subtitle that omits lines and holds them briefly no longer beats a fuller one.\n- Stop demoting subtitles whose filename does not state a language; only bilingual releases\n  are ranked down now.\n- Identify a subtitle's language by reading it rather than by parsing its filename, so an\n  untagged Japanese file is recognised and a bilingual one is caught however it is named.\n- Fix the choice between the two ways of comparing timings, which preferred the one that then\n  failed its own threshold and caused every candidate to be declined.\n- Cache the timing reference per episode, so listing candidates and then applying one no longer\n  repeats the most expensive step.\n- Add Jimaku to the main menu.",
                 "targetAbi": "10.11.0.0",

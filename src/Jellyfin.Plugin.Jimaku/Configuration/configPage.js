@@ -4,12 +4,15 @@ const FIELDS = {
     checkbox: [
         'EnableScheduledTask', 'OverwriteExisting', 'AllowArchives',
         'EnableFramerateCorrection', 'AllowPiecewiseOnDemand', 'AllowPiecewiseScheduled',
-        'EnableAudioFallback', 'DetectReferenceBias'
+        'EnableAudioFallback', 'DetectReferenceBias',
+        'ShowClientNotifications', 'WriteActivityLog', 'UseSeriesPreference'
     ],
     number: [
         'MinCorrelation', 'MinOnsetCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
         'MinCorrectionSeconds',
-        'RetryDeclinedAfterDays', 'KaraokePolicy'
+        'RetryDeclinedAfterDays', 'KaraokePolicy',
+        'MaxEpisodesPerRun', 'OnlySweepEpisodesAddedWithinDays',
+        'SeriesPreferenceMinConfirmations', 'SeriesEntryCacheHours'
     ],
     text: ['ApiKey', 'LanguageTag', 'SileroModelPath']
 };
@@ -31,10 +34,13 @@ function loadConfig(view) {
 
 function populateLibraries(view, selectedIds) {
     return ApiClient.getVirtualFolders().then(folders => {
-        const select = view.querySelector('#LibraryIds');
+        const host = view.querySelector('#LibraryIds');
         const selected = new Set(selectedIds || []);
-        select.innerHTML = folders
-            .map(f => `<option value="${escapeHtml(f.ItemId)}"${selected.has(f.ItemId) ? ' selected' : ''}>${escapeHtml(f.Name)}</option>`)
+        host.innerHTML = folders
+            .map(f => `<label class="checkboxContainer">`
+                + `<input is="emby-checkbox" type="checkbox" class="libraryCheck" `
+                + `data-id="${escapeHtml(f.ItemId)}"${selected.has(f.ItemId) ? ' checked' : ''} />`
+                + `<span>${escapeHtml(f.Name)}</span></label>`)
             .join('');
     });
 }
@@ -46,7 +52,9 @@ function saveConfig(view) {
         FIELDS.number.forEach(id => { config[id] = Number(view.querySelector('#' + id).value); });
         FIELDS.checkbox.forEach(id => { config[id] = view.querySelector('#' + id).checked; });
 
-        config.LibraryIds = Array.from(view.querySelector('#LibraryIds').selectedOptions).map(o => o.value);
+        config.LibraryIds = Array.from(view.querySelectorAll('#LibraryIds .libraryCheck'))
+            .filter(c => c.checked)
+            .map(c => c.dataset.id);
 
         return ApiClient.updatePluginConfiguration(PLUGIN_ID, config)
             .then(result => Dashboard.processPluginConfigurationUpdateResult(result));

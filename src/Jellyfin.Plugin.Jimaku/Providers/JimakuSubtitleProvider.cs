@@ -123,6 +123,10 @@ public class JimakuSubtitleProvider(
                 // Core's SubtitleManager saves whatever comes back and refreshes the item, so
                 // writing a sidecar here too would leave two copies of the same subtitle.
                 WriteSidecar = false,
+
+                // Someone tapped download in a client and is now looking at a dialog that will
+                // tell them nothing. This is what lets the plugin speak for itself afterwards.
+                Interactive = true,
             },
             cancellationToken).ConfigureAwait(false);
 

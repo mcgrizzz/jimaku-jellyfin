@@ -30,6 +30,8 @@ public sealed class JimakuSyncService(
     ReferenceTrackResolver referenceResolver,
     SidecarWriter sidecarWriter,
     SyncHistoryStore history,
+    SeriesProfileStore profiles,
+    SyncNotifier notifier,
     ILogger<JimakuSyncService> logger)
 {
     private static PluginConfiguration Configuration =>
@@ -67,7 +69,40 @@ public sealed class JimakuSyncService(
 
         logger.LogDebug("Identifying {Name} via {Description}.", episode.Name, lookup.Description);
 
-        var entries = await SearchEntriesAsync(lookup, configuration.ApiKey, cancellationToken).ConfigureAwait(false);
+        // Every episode of a series resolves to the same entries, so searching once per episode
+        // spends a 25-per-minute budget re-asking a settled question. On a 24-episode sweep that
+        // was half the requests.
+        var seriesId = episode.SeriesId;
+        var lookupKey = LookupKey(lookup);
+        var entries = profiles.GetEntries(seriesId, lookupKey, configuration.SeriesEntryCacheHours);
+
+        if (entries is null)
+        {
+            var found = await SearchEntriesAsync(lookup, configuration.ApiKey, cancellationToken)
+                .ConfigureAwait(false);
+
+            entries = found.Select(e => new SeriesEntry
+            {
+                Id = e.Id,
+                Name = e.Name,
+                Notes = e.Notes ?? string.Empty,
+                Unverified = e.Flags.Unverified,
+            }).ToList();
+
+            if (entries.Count > 0)
+            {
+                await profiles.RememberEntriesAsync(seriesId, lookupKey, entries, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            logger.LogDebug(
+                "Reusing {Count} cached Jimaku entries for {Series}.",
+                entries.Count,
+                episode.SeriesName);
+        }
+
         if (entries.Count == 0)
         {
             return Array.Empty<SubtitleCandidate>();
@@ -80,7 +115,7 @@ public sealed class JimakuSyncService(
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var files = await GetFilesAsync(entry, lookup, configuration.ApiKey, cancellationToken)
+            var files = await GetFilesAsync(entry.Id, lookup, configuration.ApiKey, cancellationToken)
                 .ConfigureAwait(false);
 
             if (files.Count == 0)
@@ -94,12 +129,13 @@ public sealed class JimakuSyncService(
                 {
                     EntryId = entry.Id,
                     EntryName = entry.Name,
-                    EntryNotes = entry.Notes ?? string.Empty,
-                    EntryUnverified = entry.Flags.Unverified,
+                    EntryNotes = entry.Notes,
+                    EntryUnverified = entry.Unverified,
                     File = filtered.File,
                     Rejection = filtered.Rejection,
                     NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),
                     Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
+                    ReleaseGroup = ReleaseInfo.Parse(filtered.File.Name).ReleaseGroup,
                 });
             }
         }
@@ -108,9 +144,15 @@ public sealed class JimakuSyncService(
         // which is a poor result for someone asking for Japanese subtitles. The same groups almost
         // always publish a Japanese-only file beside it, so rank that first - but keep the
         // bilingual one available, since it still beats nothing.
+        // Where earlier episodes of this series settled on one group, put that group's files first.
+        // The filename score is a guess about a name; the preference is evidence from subtitles
+        // that were actually measured against this library's own copies of the same show.
+        var profile = configuration.UseSeriesPreference ? profiles.Get(seriesId) : null;
+
         return candidates
             .OrderByDescending(c => c.IsUsable)
             .ThenBy(c => LanguageRank(c.Languages))
+            .ThenByDescending(c => MatchesSeriesPreference(profile, c, configuration))
             .ThenByDescending(c => c.NameMatch.Score)
             .ThenBy(c => c.File.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -157,6 +199,7 @@ public sealed class JimakuSyncService(
                         Path.GetFileName(episode.Path) ?? string.Empty,
                         options.ForcedFile.Name,
                         lookup.EpisodeNumber),
+                    ReleaseGroup = ReleaseInfo.Parse(options.ForcedFile.Name).ReleaseGroup,
                 }
             ];
 
@@ -177,7 +220,7 @@ public sealed class JimakuSyncService(
                     ? "Jimaku has no subtitles for this episode."
                     : "Jimaku has files for this episode, but none of them are usable.");
             result.Candidates = candidates;
-            await RecordAsync(episode, result, cancellationToken).ConfigureAwait(false);
+            await FinishAsync(episode, result, options, cancellationToken).ConfigureAwait(false);
             return result;
         }
 
@@ -312,17 +355,17 @@ public sealed class JimakuSyncService(
         // matter how well it correlates, so a hundredth of a point of correlation must not buy its
         // way past that. Ranking fit first let a [CHS, JPN] file beat its own [JPN] sibling on
         // r=1.00 against r=0.99 - a difference well inside the measurement noise.
-        var best = measured
+        var acceptable = measured
             .Where(m => m.Candidate.Alignment!.IsAcceptable)
             .OrderBy(m => LanguageRank(m.Candidate.Languages))
             .ThenByDescending(m => Quality(m.Candidate))
             .ThenByDescending(m => m.Candidate.NameMatch.Score)
-            .Select(m => (Item: m, Found: true))
-            .FirstOrDefault();
+            .ToList();
 
-        if (best.Found)
+        if (acceptable.Count > 0)
         {
-            var (candidate, document, fileName) = best.Item;
+            var chosen = ApplySeriesPreference(episode, acceptable, options, configuration);
+            var (candidate, document, fileName) = chosen;
 
             if (measured.Count > 1)
             {
@@ -338,21 +381,112 @@ public sealed class JimakuSyncService(
                 document,
                 candidate.Alignment!,
                 fileName,
+                candidate.EntryId,
                 options,
                 configuration,
                 cancellationToken).ConfigureAwait(false);
 
             result.Candidates = candidates;
-            await RecordAsync(episode, result, cancellationToken).ConfigureAwait(false);
+
+            if (result.Applied && configuration.UseSeriesPreference)
+            {
+                await LearnAsync(episode, candidate, cancellationToken).ConfigureAwait(false);
+            }
+
+            await FinishAsync(episode, result, options, cancellationToken).ConfigureAwait(false);
             return result;
         }
 
         var declined = SyncResult.Fail(BuildDeclineMessage(usable, reference));
         declined.Candidates = candidates;
         declined.ReferenceSource = reference?.Source ?? "none";
-        await RecordAsync(episode, declined, cancellationToken).ConfigureAwait(false);
+        await FinishAsync(episode, declined, options, cancellationToken).ConfigureAwait(false);
         return declined;
     }
+
+    /// <summary>
+    /// Lets a series' established release group break a near-tie between verified candidates.
+    /// </summary>
+    /// <remarks>
+    /// Bounded on purpose. Once several candidates all pass verification, the gaps between them are
+    /// usually smaller than the measurement's own noise, and picking on that noise is what made the
+    /// choice wobble from episode to episode. But a preference formed on earlier episodes is not
+    /// allowed to argue with a materially better measurement on this one, so it may only overturn
+    /// a decision inside a configured tolerance - and never one that would swap a Japanese-only
+    /// file for a bilingual release.
+    /// </remarks>
+    private (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) ApplySeriesPreference(
+        Episode episode,
+        List<(SubtitleCandidate Candidate, SubtitleDocument Document, string FileName)> ranked,
+        SyncOptions options,
+        PluginConfiguration configuration)
+    {
+        var chosen = ranked[0];
+
+        if (!configuration.UseSeriesPreference || options.ForcedFile is not null || ranked.Count < 2)
+        {
+            return chosen;
+        }
+
+        var profile = profiles.Get(episode.SeriesId);
+        if (profile is null)
+        {
+            return chosen;
+        }
+
+        var index = ranked.FindIndex(m => MatchesSeriesPreference(profile, m.Candidate, configuration));
+        if (index <= 0)
+        {
+            return chosen;
+        }
+
+        var preferred = ranked[index];
+
+        if (LanguageRank(preferred.Candidate.Languages) > LanguageRank(chosen.Candidate.Languages))
+        {
+            return chosen;
+        }
+
+        var sacrificed = Quality(chosen.Candidate) - Quality(preferred.Candidate);
+        if (sacrificed > configuration.SeriesPreferenceTolerance)
+        {
+            logger.LogDebug(
+                "Not applying the {Group} preference for {Series}: {File} measures {Gap:0.000} better.",
+                profile.PreferredReleaseGroup,
+                episode.SeriesName,
+                chosen.FileName,
+                sacrificed);
+            return chosen;
+        }
+
+        logger.LogInformation(
+            "Preferring {File} for {Name}: {Group} has worked for this series {Count} time(s), and it measures within {Gap:0.000} of the best.",
+            preferred.FileName,
+            episode.Name,
+            profile.PreferredReleaseGroup,
+            profile.Confirmations,
+            sacrificed);
+
+        return preferred;
+    }
+
+    private static bool MatchesSeriesPreference(
+        SeriesProfile? profile,
+        SubtitleCandidate candidate,
+        PluginConfiguration configuration) =>
+        SeriesProfileStore.IsPreferred(
+            profile,
+            candidate.ReleaseGroup,
+            candidate.EntryId,
+            configuration.SeriesPreferenceMinConfirmations);
+
+    /// <summary>
+    /// Builds a fingerprint of how a series was identified, so cached entries are dropped rather
+    /// than silently reused when the library gets re-scraped onto different provider IDs.
+    /// </summary>
+    private static string LookupKey(AnimeLookup lookup) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"a={lookup.AniListId};t={lookup.TmdbId};q={lookup.Query}");
 
     private static AlignmentResult Evaluate(
         SubtitleCandidate candidate,
@@ -408,6 +542,7 @@ public sealed class JimakuSyncService(
         SubtitleDocument document,
         AlignmentResult alignment,
         string fileName,
+        long entryId,
         SyncOptions options,
         PluginConfiguration configuration,
         CancellationToken cancellationToken)
@@ -454,6 +589,7 @@ public sealed class JimakuSyncService(
             Message = alignment.Reason,
             SidecarPath = path,
             FileName = fileName,
+            EntryId = entryId,
             Content = options.WriteSidecar ? null : text,
             Extension = extension,
             ReferenceSource = alignment.ReferenceSource,
@@ -497,13 +633,13 @@ public sealed class JimakuSyncService(
     }
 
     private async Task<IReadOnlyList<JimakuFile>> GetFilesAsync(
-        JimakuEntry entry,
+        long entryId,
         AnimeLookup lookup,
         string apiKey,
         CancellationToken cancellationToken)
     {
         var files = await apiClient
-            .GetFilesAsync(entry.Id, lookup.EpisodeNumber, apiKey, cancellationToken)
+            .GetFilesAsync(entryId, lookup.EpisodeNumber, apiKey, cancellationToken)
             .ConfigureAwait(false);
 
         if (files.Count > 0 || !lookup.EpisodeNumber.HasValue)
@@ -513,8 +649,8 @@ public sealed class JimakuSyncService(
 
         // Jimaku drops files whose episode number it cannot parse from the filename when the
         // episode filter is set, which silently hides season packs. Ask again without the filter.
-        logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entry.Id);
-        return await apiClient.GetFilesAsync(entry.Id, null, apiKey, cancellationToken).ConfigureAwait(false);
+        logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entryId);
+        return await apiClient.GetFilesAsync(entryId, null, apiKey, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -657,6 +793,47 @@ public sealed class JimakuSyncService(
             $"Declined all {usable.Count} candidate(s). Closest was '{best.File.Name}' - {best.Alignment.Reason} ({via}).");
     }
 
+    /// <summary>
+    /// Folds one confirmed success into what is known about the series.
+    /// </summary>
+    private async Task LearnAsync(Episode episode, SubtitleCandidate candidate, CancellationToken cancellationToken)
+    {
+        if (episode.SeriesId == Guid.Empty)
+        {
+            return;
+        }
+
+        var profile = profiles.Get(episode.SeriesId) ?? new SeriesProfile();
+        var before = profile.PreferredReleaseGroup;
+
+        SeriesProfileStore.RecordSuccess(profile, candidate.ReleaseGroup, candidate.EntryId);
+
+        if (!string.Equals(before, profile.PreferredReleaseGroup, StringComparison.OrdinalIgnoreCase)
+            && profile.PreferredReleaseGroup.Length > 0)
+        {
+            logger.LogInformation(
+                "{Series} now prefers subtitles from {Group}.",
+                episode.SeriesName,
+                profile.PreferredReleaseGroup);
+        }
+
+        await profiles.SaveAsync(episode.SeriesId, profile, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Records the outcome and reports it. Every exit from the pipeline goes through here, so a
+    /// path cannot be added later that quietly does neither.
+    /// </summary>
+    private async Task FinishAsync(
+        Episode episode,
+        SyncResult result,
+        SyncOptions options,
+        CancellationToken cancellationToken)
+    {
+        await RecordAsync(episode, result, cancellationToken).ConfigureAwait(false);
+        await notifier.NotifyAsync(episode, result, options.Interactive, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task RecordAsync(Episode episode, SyncResult result, CancellationToken cancellationToken)
     {
         await history.SetAsync(
@@ -665,6 +842,7 @@ public sealed class JimakuSyncService(
             {
                 AttemptedUtc = DateTimeOffset.UtcNow,
                 Verdict = result.Verdict,
+                EntryId = result.EntryId,
                 FileName = result.FileName ?? string.Empty,
                 OffsetSeconds = result.Transform.OffsetSeconds,
                 Scale = result.Transform.Scale,

@@ -36,6 +36,12 @@ public sealed class SubtitleCandidate
     public SubtitleLanguages Languages { get; set; }
 
     /// <summary>
+    /// Gets or sets the release group parsed from the file name, when it names one. Kept here so
+    /// the series preference can be consulted without re-parsing, and so the UI can show it.
+    /// </summary>
+    public string? ReleaseGroup { get; set; }
+
+    /// <summary>
     /// Gets or sets the timing verdict, populated only once the file has actually been downloaded
     /// and analysed. Listing candidates deliberately skips this so the UI stays responsive.
     /// </summary>
@@ -64,6 +70,12 @@ public sealed class SyncResult
 
     /// <summary>Gets or sets the file that was chosen, if any.</summary>
     public string? FileName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the Jimaku entry the chosen file came from. Recorded so the series profile can
+    /// learn which entry keeps working for a series whose filenames name no release group.
+    /// </summary>
+    public long EntryId { get; set; }
 
     /// <summary>Gets or sets how the timing reference was obtained.</summary>
     public string ReferenceSource { get; set; } = string.Empty;
@@ -136,4 +148,15 @@ public sealed class SyncOptions
     /// writing here as well would leave two copies of the same subtitle side by side.
     /// </remarks>
     public bool WriteSidecar { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether a person is waiting on this.
+    /// </summary>
+    /// <remarks>
+    /// Changes only how the outcome is reported, never what it is. An interactive request may
+    /// notify whoever is currently at a screen and records its declines in the activity feed;
+    /// an unattended sweep does neither, because nobody asked and most of its declines are simply
+    /// episodes Jimaku has nothing for.
+    /// </remarks>
+    public bool Interactive { get; set; }
 }

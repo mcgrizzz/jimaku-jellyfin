@@ -166,4 +166,88 @@ public class PluginConfiguration : BasePluginConfiguration
     /// cap bounds the work without pre-judging the answer.
     /// </remarks>
     public int MaxCandidatesToTry { get; set; } = 8;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to push a short message to client sessions when an
+    /// episode's subtitle changes.
+    /// </summary>
+    /// <remarks>
+    /// Jellyfin's own subtitle dialog reports nothing after "download queued", and a plugin cannot
+    /// change that. This is the substitute: the server tells the client directly once the work is
+    /// actually done.
+    /// </remarks>
+    public bool ShowClientNotifications { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how recently a session must have been active to be considered the one that
+    /// asked for an interactive sync, in minutes.
+    /// </summary>
+    public int NotifyRecentMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether outcomes are recorded in Dashboard - Activity.
+    /// </summary>
+    /// <remarks>
+    /// Successes are always recorded when this is on. Declines are only recorded for interactive
+    /// requests: an unattended sweep declines most of what it examines, because most episodes have
+    /// nothing on Jimaku, and logging those would drown the feed.
+    /// </remarks>
+    public bool WriteActivityLog { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to prefer the release group that has already worked
+    /// for other episodes of the same series.
+    /// </summary>
+    public bool UseSeriesPreference { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many confirmed successes a series needs before its release group is
+    /// preferred. Below this the preference is treated as coincidence.
+    /// </summary>
+    public int SeriesPreferenceMinConfirmations { get; set; } = 3;
+
+    /// <summary>
+    /// Gets or sets how much measured quality the series preference may override.
+    /// </summary>
+    /// <remarks>
+    /// The quality score is dominated by coverage - the fraction of reference cues the subtitle
+    /// also marks - so this is roughly "five percentage points of coverage". Past that the
+    /// measurement is telling us something real about this particular episode, and a habit formed
+    /// on earlier episodes should not be allowed to argue with it.
+    /// </remarks>
+    public double SeriesPreferenceTolerance { get; set; } = 0.05;
+
+    /// <summary>
+    /// Gets or sets how long a series' Jimaku entry list is reused before searching again, in
+    /// hours. Zero disables the cache.
+    /// </summary>
+    /// <remarks>
+    /// Every episode of a series resolves to the same entries, so searching per episode spends the
+    /// 25-requests-per-minute budget re-asking a settled question. Caching it roughly halves the
+    /// requests a sweep makes. The cost of staleness is bounded and small: a newly uploaded entry
+    /// is picked up on the next expiry.
+    /// </remarks>
+    public int SeriesEntryCacheHours { get; set; } = 12;
+
+    /// <summary>
+    /// Gets or sets the most episodes one scheduled run will attempt. Zero means no limit.
+    /// </summary>
+    /// <remarks>
+    /// Jimaku's rate limit is respected proactively, so a sweep cannot exceed it - but a large
+    /// library can keep the limiter saturated for hours on its first run. Capping the run spreads
+    /// that over successive days instead, and the history store means each day resumes where the
+    /// last left off rather than starting over.
+    /// </remarks>
+    public int MaxEpisodesPerRun { get; set; } = 250;
+
+    /// <summary>
+    /// Gets or sets a limit on how recently an episode must have been added to the library to be
+    /// swept, in days. Zero sweeps everything.
+    /// </summary>
+    /// <remarks>
+    /// Once a library has been through one full pass, the only episodes worth revisiting are the
+    /// new ones. Setting this turns the daily sweep into a watch for newly added content, which is
+    /// both far cheaper and what most libraries actually need day to day.
+    /// </remarks>
+    public int OnlySweepEpisodesAddedWithinDays { get; set; }
 }

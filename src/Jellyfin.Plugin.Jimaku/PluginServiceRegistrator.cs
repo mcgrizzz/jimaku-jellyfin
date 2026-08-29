@@ -61,6 +61,19 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // The factory reads the model path from configuration on each use, so changing it in the
         // settings page takes effect without a server restart.
+        serviceCollection.AddSingleton(provider =>
+        {
+            var store = new SeriesProfileStore(
+                provider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SeriesProfileStore>>());
+
+            store.Directory = DataFolder(Path.Combine("history", "series"));
+            return store;
+        });
+
+        // Resolves ISessionManager and IActivityManager on use, not here: this is reachable from
+        // the subtitle provider's constructor, which the container builds mid-graph.
+        serviceCollection.AddSingleton<SyncNotifier>();
+
         serviceCollection.AddSingleton<IVoiceActivityDetectorFactory, VoiceActivityDetectorFactory>();
 
         serviceCollection.AddSingleton<AnimeIdResolver>();

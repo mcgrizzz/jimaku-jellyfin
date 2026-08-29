@@ -91,7 +91,11 @@ public class JimakuScanTask(
             return;
         }
 
-        var episodes = FindEpisodes(configuration.LibraryIds, languageTag);
+        var episodes = FindEpisodes(
+            configuration.LibraryIds,
+            languageTag,
+            configuration.OnlySweepEpisodesAddedWithinDays);
+
         if (episodes.Count == 0)
         {
             logger.LogInformation("No episodes are missing {Tag} subtitles.", languageTag);
@@ -99,7 +103,21 @@ public class JimakuScanTask(
             return;
         }
 
-        logger.LogInformation("{Count} episode(s) are missing {Tag} subtitles.", episodes.Count, languageTag);
+        var found = episodes.Count;
+
+        // A first run over a large library would otherwise keep Jimaku's rate limiter saturated for
+        // hours. Capping the run spreads it over successive days instead; because outcomes are
+        // recorded per episode, tomorrow resumes rather than starting over.
+        if (configuration.MaxEpisodesPerRun > 0 && episodes.Count > configuration.MaxEpisodesPerRun)
+        {
+            episodes = episodes.Take(configuration.MaxEpisodesPerRun).ToList();
+        }
+
+        logger.LogInformation(
+            "{Found} episode(s) are missing {Tag} subtitles; attempting {Count} this run, newest first.",
+            found,
+            languageTag,
+            episodes.Count);
 
         var options = new SyncOptions
         {
@@ -165,7 +183,7 @@ public class JimakuScanTask(
             skipped);
     }
 
-    private List<Episode> FindEpisodes(string[] libraryIds, string languageTag)
+    private List<Episode> FindEpisodes(string[] libraryIds, string languageTag, int addedWithinDays)
     {
         var query = new InternalItemsQuery
         {
@@ -194,9 +212,22 @@ public class JimakuScanTask(
                 "No libraries are selected, so the sweep covers every library. Narrow this in the plugin settings if the server holds non-anime content.");
         }
 
-        return libraryManager.GetItemList(query)
+        var episodes = libraryManager.GetItemList(query)
             .OfType<Episode>()
-            .Where(e => !string.IsNullOrEmpty(e.Path))
+            .Where(e => !string.IsNullOrEmpty(e.Path));
+
+        if (addedWithinDays > 0)
+        {
+            // Once a library has had one full pass, the episodes worth revisiting are the new ones.
+            // This turns the daily sweep into a watch for newly added content.
+            var cutoff = DateTime.UtcNow - TimeSpan.FromDays(addedWithinDays);
+            episodes = episodes.Where(e => e.DateCreated >= cutoff);
+        }
+
+        // Newest first, so a capped run spends its budget on what was just added rather than on
+        // whatever the library happens to return first.
+        return episodes
+            .OrderByDescending(e => e.DateCreated)
             .ToList();
     }
 }
