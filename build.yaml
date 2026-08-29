@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 26
+version: 27
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,9 +16,11 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Measure a subtitle's rate difference instead of only trying a fixed list of framerate ratios.
-    The list covers the ratios standards conversion produces - 0.1% for NTSC pulldown, 4.17% for
-    the PAL speedup - and nothing between them, so a drift of a few tenths of a percent could not
-    be expressed at all. The search answered with a compromise offset that was right in the middle
-    of the episode and seconds out at both ends. Aligning the front and back thirds separately
-    gives the rate directly, with no grid involved.
+  - Stop the differing-cut aligner rescuing subtitles that do not match at all. It gets a free
+    offset per section, so it raises correlation almost by construction - and correlation was the
+    only thing refereeing it. A subtitle whose single-offset fit was completely non-unique, the
+    signature of the wrong file, came back as a confident two-section match. A split must now also
+    put most of the dialogue in the right place, which extra freedom alone cannot achieve.
+  - Never attempt a differing-cut match against voice activity. It has no cue structure, so there
+    is nothing to check the result against: maximum freedom on the weakest evidence.
+  - Say when a split was rejected for fitting noise, and how little of the dialogue it landed on.

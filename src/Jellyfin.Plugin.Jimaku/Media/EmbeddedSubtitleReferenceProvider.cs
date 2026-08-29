@@ -210,7 +210,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 "The only usable track looks like a signs and songs track, which cues on title cards rather than speech. Timing measured against it is unreliable.";
         }
 
-        return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, true, bestTrack);
+        return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, bestTrack);
     }
 
     /// <summary>

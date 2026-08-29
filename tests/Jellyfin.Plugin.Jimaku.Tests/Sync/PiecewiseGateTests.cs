@@ -71,7 +71,7 @@ public class PiecewiseGateTests
         var track = new CueTrack(referenceCues);
         var signal = ActivitySignal.FromCues(track, track.LastEndSeconds + 60);
 
-        return (new ReferenceTrack(signal, "test", true, track),
+        return (new ReferenceTrack(signal, "test", track),
                 SubtitleDocument.Parse(Encoding.UTF8.GetBytes(string.Join("\n", lines))));
     }
 
@@ -121,7 +121,7 @@ public class PiecewiseGateTests
 
         var track = new CueTrack(cues);
         var reference = new ReferenceTrack(
-            ActivitySignal.FromCues(track, track.LastEndSeconds + 60), "test", true, track);
+            ActivitySignal.FromCues(track, track.LastEndSeconds + 60), "test", track);
         var candidate = SubtitleDocument.Parse(Encoding.UTF8.GetBytes(string.Join("\n", lines)));
 
         var result = new SubtitleAligner(new PluginConfiguration())

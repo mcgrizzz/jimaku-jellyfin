@@ -12,7 +12,7 @@ const FIELDS = {
         'MinCorrelation', 'MinOnsetCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
         'MinCorrectionSeconds',
         'RetryDeclinedAfterDays', 'KaraokePolicy',
-        'MaxSplitBlocks', 'MinCuesPerSplitBlock',
+        'MaxSplitBlocks', 'MinCuesPerSplitBlock', 'MinPiecewiseCoverage',
         'MaxEpisodesPerRun', 'OnlySweepEpisodesAddedWithinDays',
         'SeriesPreferenceMinConfirmations', 'SeriesEntryCacheHours'
     ],

@@ -75,10 +75,11 @@ public class EndToEndTimingTests(ITestOutputHelper output)
         var original = BuildAss(truth);
         var distorted = Distort(original, scale, offset);
 
+        var referenceCues = SubtitleDocument.Parse(original).ToCueTrack();
         var reference = new ReferenceTrack(
-            ActivitySignal.FromCues(SubtitleDocument.Parse(original).ToCueTrack(), EpisodeSeconds),
+            ActivitySignal.FromCues(referenceCues, EpisodeSeconds),
             "embedded subtitles",
-            true);
+            referenceCues);
 
         var alignment = new SubtitleAligner(new PluginConfiguration()).Align(
             reference,
@@ -142,10 +143,11 @@ public class EndToEndTimingTests(ITestOutputHelper output)
         var original = BuildAss(truth);
         var distorted = Distort(original, 1.0, 6.0);
 
+        var referenceCues = SubtitleDocument.Parse(original).ToCueTrack();
         var reference = new ReferenceTrack(
-            ActivitySignal.FromCues(SubtitleDocument.Parse(original).ToCueTrack(), EpisodeSeconds),
+            ActivitySignal.FromCues(referenceCues, EpisodeSeconds),
             "embedded subtitles",
-            true);
+            referenceCues);
 
         var alignment = new SubtitleAligner(new PluginConfiguration()).Align(
             reference, SubtitleDocument.Parse(distorted), false, false);

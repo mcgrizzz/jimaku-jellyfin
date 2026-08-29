@@ -125,6 +125,24 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Gets or sets the fewest cues a piecewise block must contain to be credible.</summary>
     public int MinCuesPerSplitBlock { get; set; } = 10;
 
+    /// <summary>
+    /// Gets or sets how much of the dialogue a differing-cut match must actually land on.
+    /// </summary>
+    /// <remarks>
+    /// The check correlation cannot provide. The piecewise aligner has one free offset per section,
+    /// so it raises correlation almost by construction - which is how a subtitle whose global fit
+    /// was completely non-unique came back as a confident two-section match. A real cut, correctly
+    /// split, puts nearly every reference cue next to a subtitle cue; sections fitted to noise do
+    /// not, however well they correlate.
+    /// </remarks>
+    public double MinPiecewiseCoverage { get; set; } = 0.65;
+
+    /// <summary>
+    /// Gets or sets how much more of the dialogue a differing-cut match must land on than the
+    /// single-offset fit it replaces.
+    /// </summary>
+    public double MinPiecewiseCoverageGain { get; set; } = 0.10;
+
     /// <summary>What to do when a framerate correction meets a file containing karaoke.</summary>
     public KaraokeScalePolicy KaraokePolicy { get; set; } = KaraokeScalePolicy.Rescale;
 

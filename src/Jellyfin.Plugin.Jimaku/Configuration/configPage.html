@@ -181,6 +181,16 @@
           </div>
 
           <div class="inputContainer">
+            <input is="emby-input" type="number" id="MinPiecewiseCoverage" step="0.05" min="0" max="1"
+                   label="Dialogue a differing-cut match must land on (0-1)" />
+            <div class="fieldDescription">
+              The check correlation cannot provide. Splitting a subtitle into sections gives it a
+              free offset for each one, so it correlates better almost by construction; only
+              coverage shows whether the lines ended up where they are actually spoken.
+            </div>
+          </div>
+
+          <div class="inputContainer">
             <input is="emby-input" type="number" id="MinCuesPerSplitBlock" step="1" min="2"
                    label="Fewest lines a section may contain" />
             <div class="fieldDescription">

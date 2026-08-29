@@ -147,37 +147,40 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         // the same correlation floor and beat the global fit by a clear margin.
         var splitNote = string.Empty;
 
-        if (allowPiecewise && (!globalIsGood || expectDifferentCut))
+        // Piecewise correction is only attempted against a reference with real cue structure.
+        // Giving the aligner one free offset per section is the most permissive thing the plugin
+        // can do, and doing it against voice activity - the weakest evidence available - combines
+        // maximum freedom with minimum information. It will always find something.
+        if (allowPiecewise && (!globalIsGood || expectDifferentCut)
+            && reference.Cues is { Count: > 0 } splitReference)
         {
             var split = new SplitAligner().Align(reference.Signal, probe, best.OffsetSeconds);
-            if (IsCredibleSplit(split, best.Correlation, minCorrelation))
+
+            var splitCoverage = CueCoverage.Measure(
+                splitReference,
+                probe,
+                split.Blocks,
+                reference.Signal.DurationSeconds);
+
+            if (IsCredibleSplit(split, splitCoverage, result.Coverage, best.Correlation, minCorrelation))
             {
                 result.Verdict = SyncVerdict.PiecewiseCut;
                 result.Blocks = split.Blocks;
                 result.Correlation = split.Correlation;
 
-                // Re-measure against the correction actually being applied. The figure computed
+                // Measured against the correction actually being applied. The figure computed
                 // earlier used the global fit, which for a differently-cut subtitle is wrong for
                 // most of the file - and coverage leads the ranking between candidates.
-                if (reference.Cues is { Count: > 0 } splitReference)
-                {
-                    var splitCoverage = CueCoverage.Measure(
-                        splitReference,
-                        probe,
-                        split.Blocks,
-                        reference.Signal.DurationSeconds);
-
-                    result.Coverage = splitCoverage.ReferenceCovered;
-                    result.OnScreenRatio = splitCoverage.OnScreenRatio;
-                }
+                result.Coverage = splitCoverage.ReferenceCovered;
+                result.OnScreenRatio = splitCoverage.OnScreenRatio;
 
                 result.Reason = string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Matched a different cut: {split.Blocks.Count} sections, offsets {string.Join(", ", split.Blocks.Select(b => b.OffsetSeconds.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)))}s.");
+                    $"Matched a different cut: {split.Blocks.Count} sections, offsets {string.Join(", ", split.Blocks.Select(b => b.OffsetSeconds.ToString("+0.00;-0.00", CultureInfo.InvariantCulture)))}s, covering {splitCoverage.ReferenceCovered:P0} of the dialogue.");
                 return result;
             }
 
-            splitNote = DescribeRejectedSplit(split, best.Correlation, minCorrelation);
+            splitNote = DescribeRejectedSplit(split, splitCoverage, best.Correlation, minCorrelation);
         }
 
         if (!globalIsGood)
@@ -287,7 +290,12 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         Reason = "The subtitle filename carries the same CRC32 as the video, so it was released against this exact file.",
     };
 
-    private bool IsCredibleSplit(SplitResult split, double globalCorrelation, double minCorrelation)
+    private bool IsCredibleSplit(
+        SplitResult split,
+        CoverageResult splitCoverage,
+        double? globalCoverage,
+        double globalCorrelation,
+        double minCorrelation)
     {
         if (split.Blocks.Count is 0 or 1)
         {
@@ -313,7 +321,23 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
 
         // Piecewise correction has more freedom than a global fit, so it must earn its use by
         // beating it clearly rather than marginally.
-        return split.Correlation > globalCorrelation + 0.05;
+        if (split.Correlation <= globalCorrelation + 0.05)
+        {
+            return false;
+        }
+
+        // Correlation alone cannot referee this. The splitter has one free offset per section, so
+        // it raises correlation almost by construction - which is how a subtitle whose global fit
+        // was completely non-unique still came back as a confident two-section match. Coverage is
+        // the check correlation cannot provide: a real cut, correctly split, puts nearly every
+        // reference cue next to a subtitle cue. Fitting noise does not, however well it correlates.
+        if (splitCoverage.ReferenceCovered < configuration.MinPiecewiseCoverage)
+        {
+            return false;
+        }
+
+        return globalCoverage is not { } before
+            || splitCoverage.ReferenceCovered > before + configuration.MinPiecewiseCoverageGain;
     }
 
     /// <summary>
@@ -324,7 +348,11 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
     /// split that reached 0.48 against a floor of 0.50 says the opposite - that the file is
     /// probably right and the evidence just fell short, which is a case for looking at it by hand.
     /// </remarks>
-    private string DescribeRejectedSplit(SplitResult split, double globalCorrelation, double minCorrelation)
+    private string DescribeRejectedSplit(
+        SplitResult split,
+        CoverageResult splitCoverage,
+        double globalCorrelation,
+        double minCorrelation)
     {
         if (split.Blocks.Count <= 1)
         {
@@ -337,6 +365,14 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
             return string.Create(
                 CultureInfo.InvariantCulture,
                 $" Splitting it into sections fitted better but broke into {split.Blocks.Count} pieces, which is what fitting noise looks like rather than a real difference in cut.");
+        }
+
+        if (split.Correlation > globalCorrelation + 0.05
+            && splitCoverage.ReferenceCovered < configuration.MinPiecewiseCoverage)
+        {
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $" Treating it as a different cut correlated better ({split.Correlation:0.00}) but still only put {splitCoverage.ReferenceCovered:P0} of the dialogue in the right place, so the sections were fitted to noise rather than to a real cut.");
         }
 
         return string.Create(

@@ -18,7 +18,7 @@ public class SubtitleAlignerTests(ITestOutputHelper output)
     private const double EpisodeSeconds = 1440;
 
     private static ReferenceTrack Reference(CueTrack track) =>
-        new(ActivitySignal.FromCues(track, EpisodeSeconds), "test reference", true);
+        new(ActivitySignal.FromCues(track, EpisodeSeconds), "test reference", track);
 
     /// <summary>Renders a cue track as an ASS file, so the aligner sees a real parsed document.</summary>
     private static SubtitleDocument Document(CueTrack track, string text = "line")
@@ -208,7 +208,7 @@ public class SmallCorrectionTests
     private const double EpisodeSeconds = 1440;
 
     private static ReferenceTrack Reference(CueTrack track) =>
-        new(ActivitySignal.FromCues(track, EpisodeSeconds), "test reference", true);
+        new(ActivitySignal.FromCues(track, EpisodeSeconds), "test reference", track);
 
     private static SubtitleDocument Document(CueTrack track)
     {

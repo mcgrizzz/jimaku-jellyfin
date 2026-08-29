@@ -140,7 +140,7 @@ public sealed class AudioActivityReferenceProvider(
                 "Energy-based detection is unreliable for anime, where a near-continuous score leaves little silence to key on. A neural model (Silero) gives a far better reference.";
         }
 
-        return new ReferenceTrack(signal, description, false);
+        return new ReferenceTrack(signal, description);
     }
 
     private static MediaStream? SelectAudioStream(MediaSourceInfo? source)

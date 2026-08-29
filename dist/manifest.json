@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.26.0",
+                "changelog": "- Stop the differing-cut aligner rescuing subtitles that do not match at all. It gets a free\n  offset per section, so it raises correlation almost by construction - and correlation was the\n  only thing refereeing it. A subtitle whose single-offset fit was completely non-unique, the\n  signature of the wrong file, came back as a confident two-section match. A split must now also\n  put most of the dialogue in the right place, which extra freedom alone cannot achieve.\n- Never attempt a differing-cut match against voice activity. It has no cue structure, so there\n  is nothing to check the result against: maximum freedom on the weakest evidence.\n- Say when a split was rejected for fitting noise, and how little of the dialogue it landed on.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.26.0.zip",
+                "checksum": "179dcb9066ea0fe68eb9d88e613e55d0",
+                "timestamp": "2026-08-29T19:25:59Z"
+            },
+            {
                 "version": "1.0.25.0",
                 "changelog": "- Measure a subtitle's rate difference instead of only trying a fixed list of framerate ratios.\n  The list covers the ratios standards conversion produces - 0.1% for NTSC pulldown, 4.17% for\n  the PAL speedup - and nothing between them, so a drift of a few tenths of a percent could not\n  be expressed at all. The search answered with a compromise offset that was right in the middle\n  of the episode and seconds out at both ends. Aligning the front and back thirds separately\n  gives the rate directly, with no grid involved.",
                 "targetAbi": "10.11.0.0",
