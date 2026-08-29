@@ -8,12 +8,12 @@
         "category": "Subtitles",
         "versions": [
             {
-                "version": "1.0.13.0",
-                "changelog": "- Choose the timing reference by agreement between the embedded tracks, not by cue count. The\n  densest track is often the group's own, carrying karaoke and signs and timed differently.\n- Rank candidates on how much dialogue they actually cover, not only on how well they align.\n  A subtitle that omits lines and holds them briefly no longer beats a fuller one.\n- Stop demoting subtitles whose filename does not state a language; only bilingual releases\n  are ranked down now.\n- Identify a subtitle's language by reading it rather than by parsing its filename, so an\n  untagged Japanese file is recognised and a bilingual one is caught however it is named.\n- Fix the choice between the two ways of comparing timings, which preferred the one that then\n  failed its own threshold and caused every candidate to be declined.",
+                "version": "1.0.14.0",
+                "changelog": "- Choose the timing reference by agreement between the embedded tracks, not by cue count. The\n  densest track is often the group's own, carrying karaoke and signs and timed differently.\n- Rank candidates on how much dialogue they actually cover, not only on how well they align.\n  A subtitle that omits lines and holds them briefly no longer beats a fuller one.\n- Stop demoting subtitles whose filename does not state a language; only bilingual releases\n  are ranked down now.\n- Identify a subtitle's language by reading it rather than by parsing its filename, so an\n  untagged Japanese file is recognised and a bilingual one is caught however it is named.\n- Fix the choice between the two ways of comparing timings, which preferred the one that then\n  failed its own threshold and caused every candidate to be declined.\n- Cache the timing reference per episode, so listing candidates and then applying one no longer\n  repeats the most expensive step.\n- Add Jimaku to the main menu.",
                 "targetAbi": "10.11.0.0",
-                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.13.0.zip",
-                "checksum": "69711682ec3474a1b216cfd3f02369fe",
-                "timestamp": "2026-08-29T01:33:50Z"
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.14.0.zip",
+                "checksum": "aec29fd84a042c502f2b304fe3b67445",
+                "timestamp": "2026-08-29T14:34:38Z"
             }
         ]
     }

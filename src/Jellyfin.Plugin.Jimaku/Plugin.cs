@@ -50,6 +50,12 @@ public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
                 CultureInfo.InvariantCulture,
                 "{0}.Configuration.configPage.html",
                 GetType().Namespace),
+
+            // Surface it in the main menu. Fetching a subtitle is a routine action taken while
+            // watching, and burying it four levels into the dashboard makes it feel like
+            // configuration rather than something you do.
+            EnableInMainMenu = true,
+            MenuIcon = "closed_caption",
         },
         new PluginPageInfo
         {

@@ -29,8 +29,11 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 {
     private const int MinimumCues = 10;
 
-    /// <summary>Cap on tracks compared, to bound the pairwise comparison on many-subtitle releases.</summary>
-    private const int MaxTracksToCompare = 10;
+    /// <summary>
+    /// Cap on tracks compared. The vote is all-pairs, so cost grows with the square: ten tracks is
+    /// forty-five cross-correlations, six is fifteen. Six is ample to out-vote an outlier.
+    /// </summary>
+    private const int MaxTracksToCompare = 6;
 
     /// <summary>How far apart two tracks may sit and still be counted as agreeing.</summary>
     private const double AgreementToleranceSeconds = 0.15;

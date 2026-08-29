@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 14
+version: 15
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -26,3 +26,6 @@ changelog: |-
     untagged Japanese file is recognised and a bilingual one is caught however it is named.
   - Fix the choice between the two ways of comparing timings, which preferred the one that then
     failed its own threshold and caused every candidate to be declined.
+  - Cache the timing reference per episode, so listing candidates and then applying one no longer
+    repeats the most expensive step.
+  - Add Jimaku to the main menu.
