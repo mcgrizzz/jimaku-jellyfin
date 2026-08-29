@@ -65,19 +65,19 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
         var overlapFits = search.Search(reference.Signal, probe);
         if (overlapFits.Count > 0)
         {
-            hypotheses.Add(new Hypothesis(overlapFits[0], "cue overlap", configuration.MinCorrelation));
+            hypotheses.Add(new Hypothesis(
+                overlapFits[0], "cue overlap", configuration.MinCorrelation, reference.Signal, false));
         }
 
         if (reference.Cues is { Count: > 0 } referenceCues)
         {
-            var onsetFits = search.Search(
-                ActivitySignal.FromCueStarts(referenceCues, reference.Signal.DurationSeconds),
-                probe,
-                onsets: true);
+            var onsetSignal = ActivitySignal.FromCueStarts(referenceCues, reference.Signal.DurationSeconds);
+            var onsetFits = search.Search(onsetSignal, probe, null, onsets: true);
 
             if (onsetFits.Count > 0)
             {
-                hypotheses.Add(new Hypothesis(onsetFits[0], "cue starts", configuration.MinOnsetCorrelation));
+                hypotheses.Add(new Hypothesis(
+                    onsetFits[0], "cue starts", configuration.MinOnsetCorrelation, onsetSignal, true));
             }
         }
 
@@ -93,6 +93,25 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
 
         var best = chosen.Fit;
         var minCorrelation = chosen.MinCorrelation;
+
+        // The grid covers the ratios standards conversion produces and nothing between them, so a
+        // drift of a few tenths of a percent cannot be expressed at all - and the search answers
+        // with scale 1 and an offset that is wrong at both ends and least wrong in the middle.
+        // Measuring the two ends separately recovers the rate directly, with no grid involved.
+        if (configuration.EnableFramerateCorrection)
+        {
+            var refined = DriftRefiner.Refine(
+                chosen.Signal,
+                probe,
+                best,
+                chosen.Onsets,
+                configuration.MaxSearchOffsetSeconds);
+
+            if (refined is { } better)
+            {
+                best = better;
+            }
+        }
         var representation = chosen.Representation;
 
         var result = new AlignmentResult
@@ -228,7 +247,14 @@ public sealed class SubtitleAligner(PluginConfiguration configuration)
     /// <param name="Fit">The best fit this comparison found.</param>
     /// <param name="Representation">How the signals were built, for display.</param>
     /// <param name="MinCorrelation">The correlation floor for this representation.</param>
-    private readonly record struct Hypothesis(LinearFit Fit, string Representation, double MinCorrelation)
+    /// <param name="Signal">The reference signal this comparison was made against.</param>
+    /// <param name="Onsets">Whether that signal marks cue starts rather than cue spans.</param>
+    private readonly record struct Hypothesis(
+        LinearFit Fit,
+        string Representation,
+        double MinCorrelation,
+        ActivitySignal Signal,
+        bool Onsets)
     {
         /// <summary>Whether this comparison clears its own thresholds.</summary>
         public bool Passes(double minPeakRatio) =>
