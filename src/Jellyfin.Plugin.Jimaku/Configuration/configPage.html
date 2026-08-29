@@ -300,14 +300,16 @@
             <span>Prefer the release group that already works for a series</span>
           </label>
           <div class="fieldDescription">
-            Release groups are consistent across a season. Once several episodes have been served
-            correctly by the same group, later episodes prefer it &mdash; but only to break a close
-            call, never over a measurably better match.
+            Release groups are consistent across a season, so once you have picked the same group by
+            hand a couple of times, later episodes prefer it &mdash; but only to break a close call,
+            never over a measurably better match. Only your own picks count: a subtitle the plugin
+            chose confirming the preference that chose it would just be marking its own work.
+            Deleting a subtitle counts against its group.
           </div>
 
           <div class="inputContainer">
             <input is="emby-input" type="number" id="SeriesPreferenceMinConfirmations" step="1" min="1"
-                   label="Successes needed before a preference is used" />
+                   label="Deliberate picks needed before a preference is used" />
           </div>
 
           <div class="inputContainer">
@@ -324,6 +326,15 @@
           <span>Save</span>
         </button>
       </form>
+
+      <fieldset class="verticalSection" style="margin-top:2em;">
+        <legend>Sweep in progress</legend>
+        <p class="fieldDescription">
+          Jellyfin's Scheduled Tasks page shows only a percentage, so this is where a running sweep
+          says what it is actually doing &mdash; whether it was started there or from here.
+        </p>
+        <div id="SweepStatus"></div>
+      </fieldset>
 
       <fieldset class="verticalSection" style="margin-top:2em;">
         <legend>Fetch a subtitle now</legend>

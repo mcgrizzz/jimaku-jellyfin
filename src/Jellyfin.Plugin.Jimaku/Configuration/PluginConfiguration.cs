@@ -201,10 +201,16 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool UseSeriesPreference { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets how many confirmed successes a series needs before its release group is
-    /// preferred. Below this the preference is treated as coincidence.
+    /// Gets or sets how many deliberate picks a series needs before its release group is preferred.
     /// </summary>
-    public int SeriesPreferenceMinConfirmations { get; set; } = 3;
+    /// <remarks>
+    /// Only files the user chose by hand count towards this. A subtitle the plugin selected on its
+    /// own is not evidence about anything: letting automatic picks confirm the preference that
+    /// produced them makes the preference self-fulfilling, hardening whatever the first run
+    /// happened to land on. Because each confirmation is now a deliberate act rather than a
+    /// by-product, two of them mean considerably more than three used to.
+    /// </remarks>
+    public int SeriesPreferenceMinConfirmations { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets how much measured quality the series preference may override.

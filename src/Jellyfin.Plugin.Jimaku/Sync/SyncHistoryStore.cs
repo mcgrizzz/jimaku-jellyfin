@@ -58,6 +58,12 @@ public sealed class SyncAttempt
     /// <summary>Gets or sets the release group parsed from that name, if it had one.</summary>
     public string ReleaseGroup { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the user picked this file rather than the plugin
+    /// choosing it. Kept because the two are worth very different amounts as evidence.
+    /// </summary>
+    public bool UserChosen { get; set; }
+
     /// <summary>Gets or sets the sidecar written, if any.</summary>
     public string SidecarPath { get; set; } = string.Empty;
 

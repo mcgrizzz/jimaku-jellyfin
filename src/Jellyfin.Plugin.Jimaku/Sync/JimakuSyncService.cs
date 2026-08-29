@@ -406,7 +406,7 @@ public sealed class JimakuSyncService(
 
             result.Candidates = candidates;
 
-            if (result.Applied && configuration.UseSeriesPreference)
+            if (ShouldLearnFrom(result, options, configuration))
             {
                 await LearnAsync(episode, candidate, cancellationToken).ConfigureAwait(false);
             }
@@ -633,6 +633,7 @@ public sealed class JimakuSyncService(
             FileName = fileName,
             EntryId = entryId,
             ReleaseGroup = ReleaseInfo.Parse(fileName).ReleaseGroup ?? string.Empty,
+            UserChosen = options.ForcedFile is not null,
             Content = options.WriteSidecar ? null : text,
             Extension = extension,
             ReferenceSource = alignment.ReferenceSource,
@@ -834,6 +835,36 @@ public sealed class JimakuSyncService(
         return string.Create(
             CultureInfo.InvariantCulture,
             $"Declined all {usable.Count} candidate(s). Closest was '{best.File.Name}' - {best.Alignment.Reason} ({via}).");
+    }
+
+    /// <summary>
+    /// Decides whether an outcome is evidence about the series, or merely the plugin agreeing with
+    /// itself.
+    /// </summary>
+    /// <remarks>
+    /// Only a file the user picked counts. An automatic selection confirming the preference that
+    /// produced it is not an observation, and the error compounds: whatever the first sweep happened
+    /// to land on biases the second episode, which confirms it again, until a coin flip has hardened
+    /// into a rule that then outranks measurement on every subsequent episode. Rejections are
+    /// treated the other way round and always count, whoever chose the file - deleting a subtitle is
+    /// a judgement only a person can make.
+    /// </remarks>
+    /// <param name="result">What happened.</param>
+    /// <param name="options">How the attempt was made.</param>
+    /// <param name="configuration">The current settings.</param>
+    /// <returns><see langword="true"/> when the series profile should be updated.</returns>
+    internal static bool ShouldLearnFrom(
+        SyncResult result,
+        SyncOptions options,
+        PluginConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return result.Applied
+            && configuration.UseSeriesPreference
+            && options.ForcedFile is not null;
     }
 
     /// <summary>
@@ -1048,6 +1079,7 @@ public sealed class JimakuSyncService(
                 EntryId = result.EntryId,
                 FileName = result.FileName ?? string.Empty,
                 ReleaseGroup = result.ReleaseGroup,
+                UserChosen = result.UserChosen,
                 SidecarPath = result.SidecarPath ?? string.Empty,
                 OffsetSeconds = result.Transform.OffsetSeconds,
                 Scale = result.Transform.Scale,

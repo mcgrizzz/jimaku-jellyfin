@@ -139,13 +139,20 @@ function loadEpisodes(view, seriesId, seriesName) {
 
         let html = `<div style="margin-bottom:0.5em;">
             <button is="emby-button" type="button" class="raised jimaku-back"><span>&larr; Back to search</span></button>
-            <strong style="margin-left:0.75em;">${escapeHtml(seriesName)}</strong></div>`;
+            <strong style="margin-left:0.75em;">${escapeHtml(seriesName)}</strong>
+            <button is="emby-button" type="button" class="raised jimaku-sweep-parent"
+                    data-id="${seriesId}" data-label="${escapeHtml(seriesName)}" style="margin-left:0.75em;">
+                <span>Fetch for the whole series</span></button></div>`;
 
         let season = null;
         for (const item of result.Items) {
             if (item.ParentIndexNumber !== season) {
                 season = item.ParentIndexNumber;
-                html += `<div style="margin:0.75em 0 0.25em;font-weight:600;">Season ${season ?? '?'}</div>`;
+                const label = `${seriesName} season ${season ?? '?'}`;
+                html += `<div style="margin:0.75em 0 0.25em;font-weight:600;">Season ${season ?? '?'}
+                    ${item.SeasonId ? `<button is="emby-button" type="button" class="raised jimaku-sweep-parent"
+                        data-id="${item.SeasonId}" data-label="${escapeHtml(label)}" style="margin-left:0.5em;font-weight:400;">
+                        <span>Fetch this season</span></button>` : ''}</div>`;
             }
 
             // Flag episodes that already have Japanese subtitles, so it is obvious which ones
@@ -278,6 +285,86 @@ function renderCandidates(view, candidates, itemId) {
             The name match is only a pre-filter. Timing is verified against your media before
             anything is written.
         </p>`;
+}
+
+let sweepTimer = null;
+
+function renderSweep(view, status) {
+    const host = view.querySelector('#SweepStatus');
+
+    if (!status.IsRunning && !status.Total) {
+        host.innerHTML = '<p class="fieldDescription">No sweep has run since the server started.</p>';
+        return;
+    }
+
+    const pct = status.Total ? Math.round(100 * status.Completed / status.Total) : 0;
+
+    let html = `<div style="margin-bottom:0.5em;">
+        <strong>${status.IsRunning ? 'Running' : 'Finished'}</strong>
+        &middot; ${escapeHtml(status.Scope)}
+        &middot; ${status.Completed} of ${status.Total} (${pct}%)
+        <div style="background:rgba(255,255,255,0.15);height:0.5em;border-radius:0.25em;margin:0.4em 0;">
+            <div style="background:#00a4dc;height:100%;border-radius:0.25em;width:${pct}%;"></div>
+        </div>
+        <div>${status.Applied} attached &middot; ${status.Declined} declined &middot; ${status.Skipped} skipped</div>`;
+
+    if (status.IsRunning) {
+        html += `<div style="margin-top:0.3em;">Working on: <strong>${escapeHtml(status.CurrentEpisode || '…')}</strong></div>
+            <button is="emby-button" type="button" class="raised jimaku-sweep-cancel" style="margin-top:0.5em;">
+                <span>Stop the sweep</span></button>`;
+    } else if (status.Conclusion) {
+        html += `<div style="margin-top:0.3em;">${escapeHtml(status.Conclusion)}</div>`;
+    }
+
+    html += '</div>';
+
+    const outcomes = status.Outcomes || [];
+    if (outcomes.length) {
+        html += '<table style="width:100%;border-collapse:collapse;"><tbody>'
+             + outcomes.map(o => `<tr style="vertical-align:top;${o.Applied ? '' : 'opacity:0.7;'}">
+                    <td style="padding:0.2em 0.75em 0.2em 0;">${o.Applied ? '&#10003;' : '&ndash;'}</td>
+                    <td style="padding:0.2em 0.75em 0.2em 0;">${escapeHtml(o.Name)}</td>
+                    <td style="padding:0.2em 0;">${escapeHtml(o.FileName || o.Message)}</td>
+                  </tr>`).join('')
+             + '</tbody></table>';
+    }
+
+    host.innerHTML = html;
+}
+
+function pollSweep(view, force) {
+    return ApiClient.ajax({
+        type: 'GET',
+        url: ApiClient.getUrl('Jellyfin.Plugin.Jimaku/Sweep/Status'),
+        dataType: 'json'
+    }).then(status => {
+        renderSweep(view, status);
+
+        clearTimeout(sweepTimer);
+        if (status.IsRunning || force) {
+            sweepTimer = setTimeout(() => pollSweep(view, false), 2000);
+        }
+        return status;
+    }).catch(() => { clearTimeout(sweepTimer); });
+}
+
+function startSweep(view, body, label) {
+    const host = view.querySelector('#SweepStatus');
+    host.innerHTML = '<p class="fieldDescription">Starting ' + escapeHtml(label) + '…</p>';
+
+    ApiClient.ajax({
+        type: 'POST',
+        url: ApiClient.getUrl('Jellyfin.Plugin.Jimaku/Sweep'),
+        data: JSON.stringify(body),
+        contentType: 'application/json',
+        dataType: 'json'
+    }).then(status => {
+        renderSweep(view, status);
+        clearTimeout(sweepTimer);
+        sweepTimer = setTimeout(() => pollSweep(view, true), 1000);
+    }).catch(err => describeError(err).then(text => {
+        host.innerHTML = '<strong>Could not start</strong><div>' + escapeHtml(text) + '</div>';
+    }));
 }
 
 const STATUS_TEXT = {
@@ -417,6 +504,13 @@ export default function (view) {
         loadConfig(view)
             .then(config => populateLibraries(view, config.LibraryIds))
             .finally(() => Dashboard.hideLoadingMsg());
+
+        // A sweep started from Dashboard - Scheduled Tasks reports here too, so pick it up on open.
+        pollSweep(view, false);
+    });
+
+    view.addEventListener('viewhide', function () {
+        clearTimeout(sweepTimer);
     });
 
     view.querySelector('#JimakuConfigForm').addEventListener('submit', function (e) {
@@ -441,6 +535,25 @@ export default function (view) {
 
         const back = e.target.closest('.jimaku-back');
         if (back) { searchSeries(view, view.querySelector('#EpisodeSearch').value.trim()); return; }
+
+        const sweepParent = e.target.closest('.jimaku-sweep-parent');
+        if (sweepParent) {
+            startSweep(
+                view,
+                { ParentId: sweepParent.dataset.id, OnlyMissingSubtitles: true, RespectHistory: false },
+                sweepParent.dataset.label);
+            return;
+        }
+
+        const sweepCancel = e.target.closest('.jimaku-sweep-cancel');
+        if (sweepCancel) {
+            ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl('Jellyfin.Plugin.Jimaku/Sweep/Cancel'),
+                dataType: 'json'
+            }).then(status => renderSweep(view, status));
+            return;
+        }
 
         const auto = e.target.closest('.jimaku-auto');
         if (auto) { runAuto(view, auto.dataset.id); return; }

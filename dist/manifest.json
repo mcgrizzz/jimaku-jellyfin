@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.17.0",
+                "changelog": "- Only count subtitles you picked yourself towards a series' preferred release group. A bulk run\n  confirming the preference that produced it was the plugin marking its own work, and it\n  compounds: whatever the first sweep landed on would bias the next episode and confirm itself\n  again. Rejections still count however the file got there.\n- Sweep a chosen series or season from the plugin page, rather than only whole libraries nightly.\n- Show what a sweep is actually doing. The Scheduled Tasks page renders only a name and a\n  percentage, so the running episode and tally now appear in the task's name there, and in full\n  on the plugin page - which episode, what was attached, and why anything was declined - for a\n  run started from either place. It can be stopped from there too.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.17.0.zip",
+                "checksum": "2624d49b3b2bb26d20bfe04b7d642cfc",
+                "timestamp": "2026-08-29T15:32:59Z"
+            },
+            {
                 "version": "1.0.16.0",
                 "changelog": "- Keep a record of what was attached to each episode. The sidecar's filename is derived from the\n  media file, so nothing on disk said which Jimaku upload it came from; the plugin now tracks\n  every attempt, and writes the source file name into the subtitle itself.\n- Treat deleting a subtitle as rejecting it. That file is no longer chosen automatically for the\n  episode, and the credit it gave the series' preferred release group is taken back. Picking it\n  explicitly still works.\n- Remove the subtitle being replaced instead of leaving it behind under a \".1.\" counter, so an\n  episode stops accumulating sidecars the player can choose between. Only ever a file the plugin\n  recorded writing, or one carrying its own stamp.\n- Add a \"what's attached?\" view per episode, with a button to reject the current subtitle.",
                 "targetAbi": "10.11.0.0",

@@ -192,3 +192,86 @@ public class EpisodeHistoryDto
     /// <summary>Gets or sets the sidecar files presently on disk for this episode.</summary>
     public IReadOnlyList<string> SidecarsOnDisk { get; set; } = Array.Empty<string>();
 }
+
+/// <summary>
+/// Request to sweep a chosen part of the library.
+/// </summary>
+public class SweepRequest
+{
+    /// <summary>Gets or sets a series or season to sweep. Every episode beneath it is covered.</summary>
+    public Guid? ParentId { get; set; }
+
+    /// <summary>Gets or sets specific episodes to attempt, in place of a parent.</summary>
+    public IReadOnlyList<Guid> EpisodeIds { get; set; } = Array.Empty<Guid>();
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to skip episodes that already have a Japanese track.
+    /// </summary>
+    public bool OnlyMissingSubtitles { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to skip episodes already settled or recently declined.
+    /// </summary>
+    public bool RespectHistory { get; set; }
+}
+
+/// <summary>One episode's outcome during a sweep.</summary>
+public class SweepOutcomeDto
+{
+    /// <summary>Gets or sets the episode.</summary>
+    public Guid EpisodeId { get; set; }
+
+    /// <summary>Gets or sets a display name for it.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether a subtitle was attached.</summary>
+    public bool Applied { get; set; }
+
+    /// <summary>Gets or sets the verdict reached.</summary>
+    public string Verdict { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the file that was used, when one was.</summary>
+    public string FileName { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the explanation.</summary>
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Live state of the running sweep, which the Scheduled Tasks view cannot show.
+/// </summary>
+public class SweepStatusDto
+{
+    /// <summary>Gets or sets a value indicating whether a sweep is running.</summary>
+    public bool IsRunning { get; set; }
+
+    /// <summary>Gets or sets what the run covers.</summary>
+    public string Scope { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the episode currently being worked on.</summary>
+    public string CurrentEpisode { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets how many episodes have been dealt with.</summary>
+    public int Completed { get; set; }
+
+    /// <summary>Gets or sets how many episodes the run covers.</summary>
+    public int Total { get; set; }
+
+    /// <summary>Gets or sets how many subtitles were attached.</summary>
+    public int Applied { get; set; }
+
+    /// <summary>Gets or sets how many episodes were declined.</summary>
+    public int Declined { get; set; }
+
+    /// <summary>Gets or sets how many episodes were skipped.</summary>
+    public int Skipped { get; set; }
+
+    /// <summary>Gets or sets how the run ended, once it has.</summary>
+    public string Conclusion { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets when the run started.</summary>
+    public DateTimeOffset? StartedUtc { get; set; }
+
+    /// <summary>Gets or sets the outcomes so far, newest first.</summary>
+    public IReadOnlyList<SweepOutcomeDto> Outcomes { get; set; } = Array.Empty<SweepOutcomeDto>();
+}

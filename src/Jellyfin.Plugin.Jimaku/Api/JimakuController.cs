@@ -32,6 +32,7 @@ namespace Jellyfin.Plugin.Jimaku.Api;
 public class JimakuController(
     JimakuSyncService syncService,
     JimakuApiClient apiClient,
+    SweepRunner sweepRunner,
     ILibraryManager libraryManager,
     ILogger<JimakuController> logger) : ControllerBase
 {
@@ -241,6 +242,113 @@ public class JimakuController(
     }
 
     /// <summary>
+    /// Sweeps a chosen series, season or set of episodes.
+    /// </summary>
+    /// <remarks>
+    /// The scheduled task can only be pointed at whole libraries, which is the wrong granularity
+    /// for "I just added a season and want subtitles for it". This runs the same pipeline over
+    /// whatever you name, in the background, reporting into the same live status.
+    /// </remarks>
+    /// <param name="body">What to sweep.</param>
+    /// <returns>The status of the run that was started.</returns>
+    [HttpPost("Jellyfin.Plugin.Jimaku/Sweep")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public ActionResult<SweepStatusDto> StartSweep([FromBody] SweepRequest body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+
+        var configuration = Plugin.Instance?.Configuration;
+        if (configuration is null || string.IsNullOrWhiteSpace(configuration.ApiKey))
+        {
+            return BadRequest("No Jimaku API key is configured.");
+        }
+
+        if (sweepRunner.Progress.IsRunning)
+        {
+            // Jimaku's budget is per-IP and shared, so a second sweep would only take turns waiting
+            // on the same limiter while making the progress reporting incoherent.
+            return Conflict("A sweep is already running.");
+        }
+
+        var label = "the selected episodes";
+        var ancestors = new List<Guid>();
+
+        if (body.ParentId is { } parentId && parentId != Guid.Empty)
+        {
+            var parent = libraryManager.GetItemById(parentId);
+            if (parent is null)
+            {
+                return NotFound("That series or season could not be found.");
+            }
+
+            ancestors.Add(parentId);
+            label = parent.Name ?? "a series";
+        }
+
+        var scope = new SweepScope
+        {
+            AncestorIds = ancestors,
+            EpisodeIds = body.EpisodeIds,
+            OnlyMissingSubtitles = body.OnlyMissingSubtitles,
+            RespectHistory = body.RespectHistory,
+            Label = label,
+        };
+
+        var options = new SyncOptions
+        {
+            AllowPiecewise = configuration.AllowPiecewiseOnDemand,
+            AllowAudioFallback = configuration.EnableAudioFallback,
+
+            // A bulk run is not a per-episode decision by the user, so it neither notifies as one
+            // nor teaches the series preference anything.
+            Interactive = false,
+        };
+
+        // Detached deliberately: the request's cancellation token dies with the response, and this
+        // run outlives it. Cancellation goes through the progress object instead.
+        var cancellation = new CancellationTokenSource();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await sweepRunner.RunAsync(scope, options, null, cancellation).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "The on-demand sweep failed.");
+            }
+            finally
+            {
+                cancellation.Dispose();
+            }
+        });
+
+        return Ok(ToDto(sweepRunner.Progress));
+    }
+
+    /// <summary>
+    /// Reports what the running sweep is doing.
+    /// </summary>
+    /// <returns>The live status.</returns>
+    [HttpGet("Jellyfin.Plugin.Jimaku/Sweep/Status")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<SweepStatusDto> SweepStatus() => Ok(ToDto(sweepRunner.Progress));
+
+    /// <summary>
+    /// Asks the running sweep to stop.
+    /// </summary>
+    /// <returns>The status after asking.</returns>
+    [HttpPost("Jellyfin.Plugin.Jimaku/Sweep/Cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<SweepStatusDto> CancelSweep()
+    {
+        sweepRunner.Progress.Cancel();
+        return Ok(ToDto(sweepRunner.Progress));
+    }
+
+    /// <summary>
     /// Checks that a Jimaku API key is accepted.
     /// </summary>
     /// <param name="body">The key to test, or empty to test the saved one.</param>
@@ -274,6 +382,29 @@ public class JimakuController(
             return Ok(false);
         }
     }
+
+    private static SweepStatusDto ToDto(SweepProgress progress) => new()
+    {
+        IsRunning = progress.IsRunning,
+        Scope = progress.Scope,
+        CurrentEpisode = progress.CurrentEpisode,
+        Completed = progress.Completed,
+        Total = progress.Total,
+        Applied = progress.Applied,
+        Declined = progress.Declined,
+        Skipped = progress.Skipped,
+        Conclusion = progress.Conclusion,
+        StartedUtc = progress.StartedUtc,
+        Outcomes = progress.Outcomes.Select(o => new SweepOutcomeDto
+        {
+            EpisodeId = o.EpisodeId,
+            Name = o.Name,
+            Applied = o.Applied,
+            Verdict = o.Verdict,
+            FileName = o.FileName,
+            Message = o.Message,
+        }).ToList(),
+    };
 
     private EpisodeHistoryDto BuildHistory(Episode episode)
     {

@@ -86,6 +86,12 @@ public sealed class SyncResult
     /// <summary>Gets or sets the release group of the chosen file, when its name gave one.</summary>
     public string ReleaseGroup { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the user picked this file, as opposed to the plugin
+    /// selecting it. Only a user's choice is allowed to teach the series preference anything.
+    /// </summary>
+    public bool UserChosen { get; set; }
+
     /// <summary>Gets or sets how the timing reference was obtained.</summary>
     public string ReferenceSource { get; set; } = string.Empty;
 

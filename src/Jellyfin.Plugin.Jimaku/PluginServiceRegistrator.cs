@@ -74,6 +74,11 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // the subtitle provider's constructor, which the container builds mid-graph.
         serviceCollection.AddSingleton<SyncNotifier>();
 
+        // Shared state: the scheduled task and the on-demand endpoint drive the same run, and the
+        // progress view has to see it whichever started it.
+        serviceCollection.AddSingleton<SweepProgress>();
+        serviceCollection.AddSingleton<SweepRunner>();
+
         serviceCollection.AddSingleton<IVoiceActivityDetectorFactory, VoiceActivityDetectorFactory>();
 
         serviceCollection.AddSingleton<AnimeIdResolver>();
