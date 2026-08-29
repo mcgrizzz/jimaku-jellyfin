@@ -170,10 +170,12 @@ public sealed class SyncHistoryTests : IDisposable
     }
 
     [Fact]
-    public async Task AnOlderRecordWithNoAttemptListStillLoads()
+    public async Task AnOlderRecordWithNoAttemptListIsBroughtForward()
     {
         // Versions before this shipped wrote only the flat "last attempt" fields. Those files are
-        // sitting on the user's server right now and must not throw on read.
+        // sitting on the user's server right now, and every behaviour added since reads the attempt
+        // list - so loading without throwing is not enough; the one attempt they describe has to be
+        // reconstructed or the episode stays invisible to all of it.
         Directory.CreateDirectory(_directory);
         await File.WriteAllTextAsync(
             Path.Combine(_directory, _item.ToString("N") + ".json"),
@@ -184,7 +186,11 @@ public sealed class SyncHistoryTests : IDisposable
 
         Assert.NotNull(entry);
         Assert.Equal("old.ass", entry.FileName);
-        Assert.Empty(entry.Attempts);
         Assert.Empty(entry.RejectedFileNames);
+
+        var attempt = Assert.Single(entry.Attempts);
+        Assert.Equal(AttemptStatus.Applied, attempt.Status);
+        Assert.Equal("/media/old.jpn.ass", attempt.SidecarPath);
+        Assert.False(attempt.UserChosen);
     }
 }

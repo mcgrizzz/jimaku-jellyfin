@@ -177,6 +177,7 @@ public sealed class SyncHistoryStore(ILogger<SyncHistoryStore> logger)
             var entry = JsonSerializer.Deserialize<SyncHistoryEntry>(File.ReadAllText(path), SerializerOptions);
             if (entry is not null)
             {
+                Backfill(entry);
                 _cache[itemId] = entry;
             }
 
@@ -419,6 +420,47 @@ public sealed class SyncHistoryStore(ILogger<SyncHistoryStore> logger)
 
         entry.RejectedFileNames.Clear();
         await SetAsync(itemId, entry, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Turns a record written before attempts were logged into one attempt.
+    /// </summary>
+    /// <remarks>
+    /// Earlier versions kept only the last outcome in flat fields and overwrote it each run. Every
+    /// new behaviour reads the attempt list instead, so without this an episode synced by an older
+    /// version is invisible to all of it: its sidecar is never cleaned up when replaced, deleting it
+    /// teaches nothing, and the reject action reports that nothing is attached. Reconstructing the
+    /// one attempt those fields describe is enough to bring them back into the fold.
+    /// </remarks>
+    /// <param name="entry">The entry to migrate, in place.</param>
+    private static void Backfill(SyncHistoryEntry entry)
+    {
+        if (entry.Attempts.Count > 0 || string.IsNullOrEmpty(entry.FileName))
+        {
+            return;
+        }
+
+        var applied = entry.Verdict is SyncVerdict.Exact or SyncVerdict.ConstantOffset
+            or SyncVerdict.FramerateDrift or SyncVerdict.PiecewiseCut;
+
+        entry.Attempts.Add(new SyncAttempt
+        {
+            AttemptedUtc = entry.AttemptedUtc,
+            Verdict = entry.Verdict,
+            Status = applied ? AttemptStatus.Applied : AttemptStatus.Declined,
+            EntryId = entry.EntryId,
+            FileName = entry.FileName,
+            ReleaseGroup = Matching.ReleaseInfo.Parse(entry.FileName).ReleaseGroup ?? string.Empty,
+            SidecarPath = entry.SidecarPath,
+            OffsetSeconds = entry.OffsetSeconds,
+            Scale = entry.Scale,
+            Correlation = entry.Correlation,
+            Reason = entry.Reason,
+
+            // Unknowable after the fact, and the safe assumption: an unproven choice must not be
+            // allowed to count as evidence about the series.
+            UserChosen = false,
+        });
     }
 
     private static void AddRejection(SyncHistoryEntry entry, string fileName)

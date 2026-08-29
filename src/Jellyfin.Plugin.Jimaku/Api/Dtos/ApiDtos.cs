@@ -275,3 +275,24 @@ public class SweepStatusDto
     /// <summary>Gets or sets the outcomes so far, newest first.</summary>
     public IReadOnlyList<SweepOutcomeDto> Outcomes { get; set; } = Array.Empty<SweepOutcomeDto>();
 }
+
+/// <summary>
+/// What a series has learned about which release group to prefer.
+/// </summary>
+public class SeriesPreferenceDto
+{
+    /// <summary>Gets or sets the preferred release group, or empty when none is established.</summary>
+    public string ReleaseGroup { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets how many deliberate picks stand behind it.</summary>
+    public int Confirmations { get; set; }
+
+    /// <summary>Gets or sets how many are needed before it is used.</summary>
+    public int Required { get; set; }
+
+    /// <summary>Gets or sets a value indicating whether it is currently strong enough to be applied.</summary>
+    public bool InUse { get; set; }
+
+    /// <summary>Gets or sets when it last changed.</summary>
+    public DateTimeOffset? UpdatedUtc { get; set; }
+}

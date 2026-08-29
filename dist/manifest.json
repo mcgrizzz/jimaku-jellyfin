@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.18.0",
+                "changelog": "- Bring episodes synced by earlier versions into the new tracking. Those records held only the\n  last outcome, so the sidecar was never cleaned up when replaced, deleting it taught nothing and\n  the reject action reported that nothing was attached.\n- Discard release-group preferences learned before automatic picks stopped counting. A preference\n  a sweep confirmed for itself is circular rather than weak, and there is no record of which\n  confirmations were yours, so it is dropped and rebuilds from your own picks. Cached Jimaku\n  searches are kept.\n- Show a series' preferred group on its episode list, with how much stands behind it and a button\n  to forget it.\n- Add \"replace subtitles that are already there\" to the series and season sweeps, so a season can\n  be redone once you have picked the right group by hand.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.18.0.zip",
+                "checksum": "60f6f06febc9b0f53084d28f677c3be5",
+                "timestamp": "2026-08-29T15:54:40Z"
+            },
+            {
                 "version": "1.0.17.0",
                 "changelog": "- Only count subtitles you picked yourself towards a series' preferred release group. A bulk run\n  confirming the preference that produced it was the plugin marking its own work, and it\n  compounds: whatever the first sweep landed on would bias the next episode and confirm itself\n  again. Rejections still count however the file got there.\n- Sweep a chosen series or season from the plugin page, rather than only whole libraries nightly.\n- Show what a sweep is actually doing. The Scheduled Tasks page renders only a name and a\n  percentage, so the running episode and tally now appear in the task's name there, and in full\n  on the plugin page - which episode, what was attached, and why anything was declined - for a\n  run started from either place. It can be stopped from there too.",
                 "targetAbi": "10.11.0.0",

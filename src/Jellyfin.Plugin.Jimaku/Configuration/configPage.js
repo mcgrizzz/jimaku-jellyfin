@@ -142,7 +142,14 @@ function loadEpisodes(view, seriesId, seriesName) {
             <strong style="margin-left:0.75em;">${escapeHtml(seriesName)}</strong>
             <button is="emby-button" type="button" class="raised jimaku-sweep-parent"
                     data-id="${seriesId}" data-label="${escapeHtml(seriesName)}" style="margin-left:0.75em;">
-                <span>Fetch for the whole series</span></button></div>`;
+                <span>Fetch for the whole series</span></button>
+            </div>
+            <div id="SeriesPreference" data-series="${seriesId}" class="fieldDescription"
+                 style="margin-bottom:0.5em;"></div>
+            <label class="checkboxContainer" style="margin-bottom:0.5em;">
+                <input is="emby-checkbox" type="checkbox" id="SweepReplaceExisting" />
+                <span>Replace subtitles that are already there</span>
+            </label>`;
 
         let season = null;
         for (const item of result.Items) {
@@ -177,6 +184,7 @@ function loadEpisodes(view, seriesId, seriesName) {
         }
 
         container.innerHTML = html;
+        loadPreference(view, seriesId);
     }).catch(err => {
         container.innerHTML = '<p class="fieldDescription">Could not load episodes: ' + escapeHtml(err) + '</p>';
     });
@@ -288,6 +296,31 @@ function renderCandidates(view, candidates, itemId) {
 }
 
 let sweepTimer = null;
+
+function renderPreference(view, pref) {
+    const host = view.querySelector('#SeriesPreference');
+    if (!host) { return; }
+
+    if (!pref.ReleaseGroup) {
+        host.innerHTML = 'No preferred release group yet for this series. Pick the same group by hand '
+            + `${pref.Required} time(s) and later episodes will lean towards it.`;
+        return;
+    }
+
+    host.innerHTML = `Preferred release group: <strong>${escapeHtml(pref.ReleaseGroup)}</strong> `
+        + `(${pref.Confirmations} of ${pref.Required} needed &mdash; ${pref.InUse ? 'in use' : 'not used yet'}). `
+        + `<button is="emby-button" type="button" class="raised jimaku-reset-preference"
+                  data-id="${host.dataset.series}" style="margin-left:0.5em;">
+             <span>Forget it</span></button>`;
+}
+
+function loadPreference(view, seriesId) {
+    return ApiClient.ajax({
+        type: 'GET',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Series/${seriesId}/Preference`),
+        dataType: 'json'
+    }).then(pref => renderPreference(view, pref)).catch(() => {});
+}
 
 function renderSweep(view, status) {
     const host = view.querySelector('#SweepStatus');
@@ -536,11 +569,26 @@ export default function (view) {
         const back = e.target.closest('.jimaku-back');
         if (back) { searchSeries(view, view.querySelector('#EpisodeSearch').value.trim()); return; }
 
+        const resetPreference = e.target.closest('.jimaku-reset-preference');
+        if (resetPreference) {
+            ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Series/${resetPreference.dataset.id}/ResetPreference`),
+                dataType: 'json'
+            }).then(pref => renderPreference(view, pref));
+            return;
+        }
+
         const sweepParent = e.target.closest('.jimaku-sweep-parent');
         if (sweepParent) {
+            const replace = view.querySelector('#SweepReplaceExisting');
             startSweep(
                 view,
-                { ParentId: sweepParent.dataset.id, OnlyMissingSubtitles: true, RespectHistory: false },
+                {
+                    ParentId: sweepParent.dataset.id,
+                    OnlyMissingSubtitles: !(replace && replace.checked),
+                    RespectHistory: false
+                },
                 sweepParent.dataset.label);
             return;
         }

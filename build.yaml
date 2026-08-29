@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 18
+version: 19
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,12 +16,14 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Only count subtitles you picked yourself towards a series' preferred release group. A bulk run
-    confirming the preference that produced it was the plugin marking its own work, and it
-    compounds: whatever the first sweep landed on would bias the next episode and confirm itself
-    again. Rejections still count however the file got there.
-  - Sweep a chosen series or season from the plugin page, rather than only whole libraries nightly.
-  - Show what a sweep is actually doing. The Scheduled Tasks page renders only a name and a
-    percentage, so the running episode and tally now appear in the task's name there, and in full
-    on the plugin page - which episode, what was attached, and why anything was declined - for a
-    run started from either place. It can be stopped from there too.
+  - Bring episodes synced by earlier versions into the new tracking. Those records held only the
+    last outcome, so the sidecar was never cleaned up when replaced, deleting it taught nothing and
+    the reject action reported that nothing was attached.
+  - Discard release-group preferences learned before automatic picks stopped counting. A preference
+    a sweep confirmed for itself is circular rather than weak, and there is no record of which
+    confirmations were yours, so it is dropped and rebuilds from your own picks. Cached Jimaku
+    searches are kept.
+  - Show a series' preferred group on its episode list, with how much stands behind it and a button
+    to forget it.
+  - Add "replace subtitles that are already there" to the series and season sweeps, so a season can
+    be redone once you have picked the right group by hand.

@@ -33,6 +33,7 @@ public class JimakuController(
     JimakuSyncService syncService,
     JimakuApiClient apiClient,
     SweepRunner sweepRunner,
+    SeriesProfileStore profiles,
     ILibraryManager libraryManager,
     ILogger<JimakuController> logger) : ControllerBase
 {
@@ -239,6 +240,44 @@ public class JimakuController(
 
         await syncService.ClearRejectionsAsync(episode, cancellationToken).ConfigureAwait(false);
         return Ok(BuildHistory(episode));
+    }
+
+    /// <summary>
+    /// Reports which release group a series has settled on, and how much stands behind it.
+    /// </summary>
+    /// <param name="seriesId">The series' item ID.</param>
+    /// <returns>The learned preference.</returns>
+    [HttpGet("Jellyfin.Plugin.Jimaku/Series/{seriesId}/Preference")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<SeriesPreferenceDto> GetSeriesPreference([FromRoute] Guid seriesId)
+    {
+        var required = Plugin.Instance?.Configuration.SeriesPreferenceMinConfirmations ?? 2;
+        var profile = profiles.Get(seriesId);
+
+        return Ok(new SeriesPreferenceDto
+        {
+            ReleaseGroup = profile?.PreferredReleaseGroup ?? string.Empty,
+            Confirmations = profile?.Confirmations ?? 0,
+            Required = required,
+            InUse = profile is not null && profile.Confirmations >= required && profile.PreferredReleaseGroup.Length > 0,
+            UpdatedUtc = profile?.UpdatedUtc,
+        });
+    }
+
+    /// <summary>
+    /// Forgets what a series has learned about release groups.
+    /// </summary>
+    /// <param name="seriesId">The series' item ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The preference after resetting.</returns>
+    [HttpPost("Jellyfin.Plugin.Jimaku/Series/{seriesId}/ResetPreference")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<SeriesPreferenceDto>> ResetSeriesPreference(
+        [FromRoute] Guid seriesId,
+        CancellationToken cancellationToken)
+    {
+        await profiles.ResetPreferenceAsync(seriesId, cancellationToken).ConfigureAwait(false);
+        return GetSeriesPreference(seriesId);
     }
 
     /// <summary>

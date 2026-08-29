@@ -39,6 +39,16 @@ public sealed class SeriesEntry
 /// </remarks>
 public sealed class SeriesProfile
 {
+    /// <summary>
+    /// Gets or sets the rules the learned fields were gathered under.
+    /// </summary>
+    /// <remarks>
+    /// Version 1 counted every applied subtitle, including the plugin's own automatic picks, which
+    /// let a sweep confirm the preference that produced it. What that gathered is not weak evidence
+    /// but circular evidence, so it is discarded on upgrade rather than carried forward.
+    /// </remarks>
+    public int Version { get; set; }
+
     /// <summary>Gets or sets the release group that has been working for this series.</summary>
     public string PreferredReleaseGroup { get; set; } = string.Empty;
 
@@ -88,6 +98,11 @@ public sealed class SeriesProfileStore(ILogger<SeriesProfileStore> logger)
     /// had stopped being the right answer.
     /// </summary>
     private const int MaxConfirmations = 10;
+
+    /// <summary>
+    /// The current learning rules. Profiles written under an older set are reset on read.
+    /// </summary>
+    private const int CurrentVersion = 2;
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -207,6 +222,57 @@ public sealed class SeriesProfileStore(ILogger<SeriesProfileStore> logger)
         return profile.PreferredEntryId != 0 && profile.PreferredEntryId == entryId;
     }
 
+    /// <summary>
+    /// Discards learning gathered under rules that allowed it to confirm itself.
+    /// </summary>
+    /// <remarks>
+    /// The cached entry list is untouched - it is a fact about Jimaku, not a judgement - but the
+    /// preference is dropped. A preference built partly from a sweep's own choices cannot be
+    /// partially salvaged: there is no record of which confirmations were the user's, and leaving
+    /// it in place would let a coin flip made during a bulk run keep outranking measurement.
+    /// </remarks>
+    private void Migrate(SeriesProfile profile, Guid seriesId)
+    {
+        if (profile.Version >= CurrentVersion)
+        {
+            return;
+        }
+
+        if (profile.Confirmations > 0 || profile.PreferredReleaseGroup.Length > 0)
+        {
+            logger.LogInformation(
+                "Discarding the learned release-group preference for series {SeriesId}: it was gathered when the plugin's own automatic picks counted as confirmations. It will rebuild from subtitles you choose yourself.",
+                seriesId);
+        }
+
+        profile.PreferredReleaseGroup = string.Empty;
+        profile.PreferredEntryId = 0;
+        profile.Confirmations = 0;
+        profile.Version = CurrentVersion;
+    }
+
+    /// <summary>
+    /// Forgets what a series has learned, leaving its cached Jimaku entries alone.
+    /// </summary>
+    /// <param name="seriesId">The series ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the write.</returns>
+    public async Task ResetPreferenceAsync(Guid seriesId, CancellationToken cancellationToken)
+    {
+        var profile = Get(seriesId);
+        if (profile is null)
+        {
+            return;
+        }
+
+        profile.PreferredReleaseGroup = string.Empty;
+        profile.PreferredEntryId = 0;
+        profile.Confirmations = 0;
+        profile.Version = CurrentVersion;
+
+        await SaveAsync(seriesId, profile, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Reads a series' profile.</summary>
     /// <param name="seriesId">The series ID.</param>
     /// <returns>The profile, or null when the series has none.</returns>
@@ -233,6 +299,7 @@ public sealed class SeriesProfileStore(ILogger<SeriesProfileStore> logger)
             var profile = JsonSerializer.Deserialize<SeriesProfile>(File.ReadAllText(path), SerializerOptions);
             if (profile is not null)
             {
+                Migrate(profile, seriesId);
                 _cache[seriesId] = profile;
             }
 
@@ -259,6 +326,7 @@ public sealed class SeriesProfileStore(ILogger<SeriesProfileStore> logger)
             return;
         }
 
+        profile.Version = CurrentVersion;
         _cache[seriesId] = profile;
 
         try
