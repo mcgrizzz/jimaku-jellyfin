@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.20.0",
+                "changelog": "- Read embedded subtitle tracks straight from the item instead of through a media source. When\n  resolving that source failed, the whole search gave up before listing anything, so a file full\n  of subtitle tracks reported having none - and said so only at debug level.\n- Fall back to extracting by stream index when extraction by path fails, so one broken route no\n  longer costs the reference entirely.\n- Use Jellyfin's own definition of a text subtitle track rather than a list of codec names, which\n  could be defeated by a spelling this plugin had not seen.\n- Log the reason each track could not be read at warning level, and show it per track. Every one\n  of these failing is the most likely reason a file with good subtitles falls back to audio, and\n  it was invisible.\n- Name image-based tracks as the cause when they are. A PGS track appears in Jellyfin's subtitle\n  menu like any other, so a file can look well supplied while carrying nothing readable.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.20.0.zip",
+                "checksum": "9167c57820658d9550bb2e3624e3ff2d",
+                "timestamp": "2026-08-29T16:11:11Z"
+            },
+            {
                 "version": "1.0.19.0",
                 "changelog": "- Say what the timing was compared against. A new per-episode view lists every embedded subtitle\n  track, whether it could be read, how many cues it had and which one was used - so an episode\n  whose tracks are all image-based is no longer indistinguishable from one where a signs track\n  was picked.\n- Explain a decline caused by the reference rather than the subtitles. When the comparison fell\n  back to voice activity, the message now says why, and that energy-based detection is weak for\n  anime.\n- Stop reporting \"covers 0% of dialogue\" when coverage could not be measured at all. A voice\n  activity reference has no cue structure to compare against, and zero read as a verdict on the\n  subtitle.\n- Sort signs and songs tracks below dialogue when choosing a reference, and say so when one is\n  all that is available.",
                 "targetAbi": "10.11.0.0",

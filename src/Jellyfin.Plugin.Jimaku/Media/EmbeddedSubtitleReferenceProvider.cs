@@ -58,7 +58,29 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(report);
 
-        MediaSourceInfo? source;
+        // Straight from the item rather than through a media source. Resolving a media source can
+        // fail for reasons that have nothing to do with the subtitles, and when it did the whole
+        // method gave up before listing anything - so a file full of subtitle tracks reported
+        // having none, and said so only at debug level.
+        var all = mediaSourceManager.GetMediaStreams(item.Id)
+            .Where(s => s.Type == MediaStreamType.Subtitle && !s.IsExternal)
+            .ToList();
+
+        Describe(all, report);
+
+        var streams = SelectStreams(all);
+        if (streams.Count == 0)
+        {
+            logger.LogInformation(
+                "{Path} has {Count} embedded subtitle track(s) but none are text, so there is nothing to compare timings against.",
+                item.Path,
+                all.Count);
+            return null;
+        }
+
+        // Only needed for extraction, and only for the faster of the two routes, so a failure here
+        // is no longer fatal.
+        MediaSourceInfo? source = null;
         try
         {
             source = await mediaSourceManager
@@ -67,17 +89,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Could not resolve a media source for {Path}.", item.Path);
-            return null;
-        }
-
-        Describe(source, report);
-
-        var streams = SelectStreams(source);
-        if (streams.Count == 0)
-        {
-            logger.LogDebug("{Path} has no embedded text subtitle track to use as a timing reference.", item.Path);
-            return null;
+            logger.LogWarning(ex, "Could not resolve a media source for {Path}; extracting by stream index instead.", item.Path);
         }
 
         // Read every text track, then let them vote.
@@ -96,13 +108,14 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             cancellationToken.ThrowIfCancellationRequested();
 
             var info = report.Streams.Find(s => s.Index == candidate.Index);
-            var parsed = await TryReadCuesAsync(candidate, source!, item, cancellationToken).ConfigureAwait(false);
+            var (parsed, failure) = await TryReadCuesAsync(candidate, source, item, cancellationToken)
+                .ConfigureAwait(false);
 
             if (parsed is null)
             {
                 if (info is not null)
                 {
-                    info.Status = "could not be extracted";
+                    info.Status = "could not be extracted: " + failure;
                 }
 
                 continue;
@@ -133,7 +146,17 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 
         if (tracks.Count == 0)
         {
-            logger.LogDebug("No embedded subtitle track for {Path} had enough cues to align against.", item.Path);
+            // Raised from debug deliberately. Every one of these failing is the single most likely
+            // reason a file with perfectly good subtitles ends up on the audio fallback, and it was
+            // invisible at default log levels.
+            logger.LogWarning(
+                "None of the {Count} text subtitle track(s) in {Path} could be read, so the timing comparison has to fall back to audio. Reasons: {Reasons}",
+                streams.Count,
+                item.Path,
+                string.Join("; ", report.Streams.Where(s => s.Status.StartsWith("could not", StringComparison.Ordinal)).Select(s => $"#{s.Index} {s.Status}")));
+
+            report.Note =
+                "This file has text subtitle tracks, but none of them could be extracted - so the timing had to be compared against the audio instead. The server log records the reason for each.";
             return null;
         }
 
@@ -259,17 +282,11 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     /// Records every embedded subtitle stream and why it is or is not a candidate, before any of
     /// them are read.
     /// </summary>
-    private static void Describe(MediaSourceInfo? source, ReferenceReport report)
+    private static void Describe(List<MediaStream> streams, ReferenceReport report)
     {
-        if (source?.MediaStreams is null)
+        foreach (var stream in streams)
         {
-            return;
-        }
-
-        foreach (var stream in source.MediaStreams.Where(s => s.Type == MediaStreamType.Subtitle && !s.IsExternal))
-        {
-            var isText = stream.Codec is not null
-                && TextCodecs.Contains(stream.Codec, StringComparer.OrdinalIgnoreCase);
+            var isText = IsUsableText(stream);
 
             report.Streams.Add(new ReferenceStreamInfo
             {
@@ -278,6 +295,8 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 Language = string.IsNullOrEmpty(stream.Language) ? "und" : stream.Language,
                 Title = stream.Title ?? string.Empty,
                 IsForced = stream.IsForced,
+                IsText = isText,
+                IsExtractable = stream.IsExtractableSubtitleStream,
 
                 // Image-based tracks are the common case on disc rips and cannot be read as text at
                 // all, which is worth stating: it is the usual reason a file with several subtitle
@@ -301,18 +320,22 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             && AnnotationMarkers.Any(m => title.Contains(m, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static List<MediaStream> SelectStreams(MediaSourceInfo? source)
-    {
-        if (source?.MediaStreams is null)
-        {
-            return [];
-        }
+    /// <summary>
+    /// Decides whether a subtitle stream carries readable timings.
+    /// </summary>
+    /// <remarks>
+    /// Jellyfin's own <see cref="MediaStream.IsTextSubtitleStream"/> is the authority and is used
+    /// first: it excludes the picture formats by name rather than admitting text ones by name, so
+    /// it cannot be defeated by a codec spelling this plugin has not seen. The local list is kept
+    /// only as a fallback for the case where no codec was reported at all.
+    /// </remarks>
+    private static bool IsUsableText(MediaStream stream) =>
+        stream.IsTextSubtitleStream
+        || (stream.Codec is not null && TextCodecs.Contains(stream.Codec, StringComparer.OrdinalIgnoreCase));
 
-        var text = source.MediaStreams
-            .Where(s => s.Type == MediaStreamType.Subtitle)
-            .Where(s => !s.IsExternal)
-            .Where(s => s.Codec is not null && TextCodecs.Contains(s.Codec, StringComparer.OrdinalIgnoreCase))
-            .ToList();
+    private static List<MediaStream> SelectStreams(List<MediaStream> streams)
+    {
+        var text = streams.Where(IsUsableText).ToList();
 
         // Dialogue first. A signs and songs track cues on title cards and lyrics rather than
         // speech, so it measures something different from the subtitle being checked - but it is
@@ -324,28 +347,73 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             .ToList();
     }
 
-    /// <summary>Extracts one embedded track and reduces it to cue timings, or null on failure.</summary>
-    private async Task<CueTrack?> TryReadCuesAsync(
+    /// <summary>
+    /// Extracts one embedded track and reduces it to cue timings.
+    /// </summary>
+    /// <remarks>
+    /// Two routes, because either can fail on its own. The path route reuses Jellyfin's subtitle
+    /// cache and is much the cheaper of the two on a second call, but it needs a resolved media
+    /// source. The stream route needs only the item and a stream index, so it still works when the
+    /// media source could not be resolved at all.
+    /// </remarks>
+    private async Task<(CueTrack? Cues, string Failure)> TryReadCuesAsync(
         MediaStream stream,
-        MediaSourceInfo source,
+        MediaSourceInfo? source,
         BaseItem item,
         CancellationToken cancellationToken)
     {
+        var failure = string.Empty;
+
+        if (source is not null)
+        {
+            try
+            {
+                var path = await subtitleEncoder
+                    .GetSubtitleFilePath(stream, source, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                {
+                    var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+                    return (SubtitleDocument.Parse(bytes).ToCueTrack(), string.Empty);
+                }
+
+                failure = "the extracted file was not written";
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failure = ex.Message;
+                logger.LogDebug(ex, "Extracting stream {Index} of {Path} by path failed.", stream.Index, item.Path);
+            }
+        }
+
         try
         {
-            // Extracts into the server's own subtitle cache and returns a real file, reusing
-            // Jellyfin's extraction and locking rather than duplicating it.
-            var path = await subtitleEncoder
-                .GetSubtitleFilePath(stream, source, cancellationToken)
-                .ConfigureAwait(false);
+            // Converting to SubRip loses styling, which does not matter: only the timings are
+            // wanted. Preserving the original timestamps does matter, and is the whole point.
+            using var extracted = await subtitleEncoder.GetSubtitles(
+                item,
+                item.Id.ToString("N"),
+                stream.Index,
+                "srt",
+                0,
+                0,
+                preserveOriginalTimestamps: true,
+                cancellationToken).ConfigureAwait(false);
 
-            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            using var buffer = new MemoryStream();
+            await extracted.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+            if (buffer.Length == 0)
             {
-                return null;
+                return (null, failure.Length > 0 ? failure : "the extracted subtitle was empty");
             }
 
-            var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-            return SubtitleDocument.Parse(bytes).ToCueTrack();
+            return (SubtitleDocument.Parse(buffer.ToArray()).ToCueTrack(), string.Empty);
         }
         catch (OperationCanceledException)
         {
@@ -353,12 +421,13 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(
+            failure = failure.Length > 0 ? failure : ex.Message;
+            logger.LogWarning(
                 ex,
                 "Could not read embedded subtitle stream {Index} of {Path}.",
                 stream.Index,
                 item.Path);
-            return null;
+            return (null, failure);
         }
     }
 }

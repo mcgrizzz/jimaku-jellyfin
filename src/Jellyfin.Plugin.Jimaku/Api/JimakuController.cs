@@ -281,6 +281,7 @@ public class JimakuController(
                 Language = s.Language,
                 Title = s.Title,
                 IsForced = s.IsForced,
+                IsText = s.IsText,
                 CueCount = s.CueCount,
                 Used = s.Used,
                 Status = s.Status,

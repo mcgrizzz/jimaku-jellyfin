@@ -315,6 +315,9 @@ public class ReferenceStreamDto
     /// <summary>Gets or sets a value indicating whether the container flags it forced.</summary>
     public bool IsForced { get; set; }
 
+    /// <summary>Gets or sets whether the track carries readable text rather than pictures.</summary>
+    public bool IsText { get; set; }
+
     /// <summary>Gets or sets how many cues were read, when it was read.</summary>
     public int CueCount { get; set; }
 

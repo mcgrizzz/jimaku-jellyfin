@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 20
+version: 21
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,15 +16,15 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Say what the timing was compared against. A new per-episode view lists every embedded subtitle
-    track, whether it could be read, how many cues it had and which one was used - so an episode
-    whose tracks are all image-based is no longer indistinguishable from one where a signs track
-    was picked.
-  - Explain a decline caused by the reference rather than the subtitles. When the comparison fell
-    back to voice activity, the message now says why, and that energy-based detection is weak for
-    anime.
-  - Stop reporting "covers 0% of dialogue" when coverage could not be measured at all. A voice
-    activity reference has no cue structure to compare against, and zero read as a verdict on the
-    subtitle.
-  - Sort signs and songs tracks below dialogue when choosing a reference, and say so when one is
-    all that is available.
+  - Read embedded subtitle tracks straight from the item instead of through a media source. When
+    resolving that source failed, the whole search gave up before listing anything, so a file full
+    of subtitle tracks reported having none - and said so only at debug level.
+  - Fall back to extracting by stream index when extraction by path fails, so one broken route no
+    longer costs the reference entirely.
+  - Use Jellyfin's own definition of a text subtitle track rather than a list of codec names, which
+    could be defeated by a spelling this plugin had not seen.
+  - Log the reason each track could not be read at warning level, and show it per track. Every one
+    of these failing is the most likely reason a file with good subtitles falls back to audio, and
+    it was invisible.
+  - Name image-based tracks as the cause when they are. A PGS track appears in Jellyfin's subtitle
+    menu like any other, so a file can look well supplied while carrying nothing readable.

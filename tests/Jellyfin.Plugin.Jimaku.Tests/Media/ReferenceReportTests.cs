@@ -32,17 +32,35 @@ public class ReferenceReportTests
     }
 
     [Fact]
-    public void ImageBasedTracksAreReportedAsTheReason()
+    public void ImageBasedTracksAreNamedAsTheReason()
     {
-        // The common case on disc rips: several subtitle tracks, none of them readable as text.
+        // The case that catches people out. A PGS track appears in Jellyfin's subtitle menu exactly
+        // like a text one, so the file looks well supplied with subtitles while offering nothing a
+        // timing comparison can read - and the old message said only "band-energy voice activity",
+        // which invited the reasonable but wrong guess that a signs track had been picked.
         var report = new ReferenceReport { FromSubtitles = false };
-        report.Streams.Add(new ReferenceStreamInfo { Index = 2, Codec = "pgssub", Status = "image-based (pgssub)" });
-        report.Streams.Add(new ReferenceStreamInfo { Index = 3, Codec = "pgssub", Status = "image-based (pgssub)" });
+        report.Streams.Add(new ReferenceStreamInfo { Index = 2, Codec = "pgssub", IsText = false });
+        report.Streams.Add(new ReferenceStreamInfo { Index = 3, Codec = "pgssub", IsText = false });
 
         var explanation = report.Explain();
 
-        Assert.Contains("2 embedded subtitle track(s) could be used", explanation, StringComparison.Ordinal);
+        Assert.Contains("image-based", explanation, StringComparison.Ordinal);
+        Assert.Contains("2 embedded subtitle track(s)", explanation, StringComparison.Ordinal);
         Assert.Contains("voice activity", explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextTracksThatCouldNotBeReadAreDistinguishedFromImageOnes()
+    {
+        // A different problem with a different fix, so it must not read the same. Here the tracks
+        // are readable in principle and extraction failed.
+        var report = new ReferenceReport { FromSubtitles = false };
+        report.Streams.Add(new ReferenceStreamInfo { Index = 2, Codec = "ass", IsText = true, CueCount = 0 });
+
+        var explanation = report.Explain();
+
+        Assert.Contains("1 text subtitle track(s) could be read", explanation, StringComparison.Ordinal);
+        Assert.DoesNotContain("image-based", explanation, StringComparison.Ordinal);
     }
 
     [Fact]

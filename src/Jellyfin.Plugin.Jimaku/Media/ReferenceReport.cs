@@ -25,6 +25,19 @@ public sealed class ReferenceStreamInfo
     /// <summary>Gets or sets a value indicating whether the container flags it forced.</summary>
     public bool IsForced { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the track carries readable text rather than pictures.
+    /// </summary>
+    /// <remarks>
+    /// The distinction that catches people out: a PGS or VobSub track appears in Jellyfin's subtitle
+    /// menu exactly like any other, so a file can look well supplied with subtitles while offering
+    /// nothing a timing comparison can read.
+    /// </remarks>
+    public bool IsText { get; set; }
+
+    /// <summary>Gets or sets whether Jellyfin considers the track extractable at all.</summary>
+    public bool IsExtractable { get; set; }
+
     /// <summary>Gets or sets how many cues were read, when it was read at all.</summary>
     public int CueCount { get; set; }
 
@@ -81,18 +94,27 @@ public sealed class ReferenceReport
 
         static string source(List<ReferenceStreamInfo> streams)
         {
-            var usable = streams.Count(s => s.CueCount > 0);
-
             if (streams.Count == 0)
             {
                 return "This file has no embedded subtitle track at all, so the timing had to be compared against voice activity in the audio.";
             }
 
-            if (usable == 0)
+            var text = streams.Count(s => s.IsText);
+            if (text == 0)
+            {
+                // The distinction worth spelling out. These tracks appear in Jellyfin's subtitle
+                // menu like any other, so the file looks well supplied while offering nothing a
+                // timing comparison can read.
+                return string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"This file's {streams.Count} embedded subtitle track(s) are all image-based (picture subtitles such as PGS), which carry no readable timings. The comparison fell back to voice activity in the audio.");
+            }
+
+            if (!streams.Any(s => s.CueCount > 0))
             {
                 return string.Create(
                     CultureInfo.InvariantCulture,
-                    $"None of this file's {streams.Count} embedded subtitle track(s) could be used as a timing reference, so the comparison fell back to voice activity in the audio.");
+                    $"None of this file's {text} text subtitle track(s) could be read, so the comparison fell back to voice activity in the audio.");
             }
 
             return "The embedded subtitle tracks could not be used, so the comparison fell back to voice activity in the audio.";

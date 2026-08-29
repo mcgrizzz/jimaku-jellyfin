@@ -486,7 +486,7 @@ function renderReference(view, report) {
                     <td style="padding:0.2em 0.75em 0.2em 0;">#${t.Index} ${escapeHtml(t.Language)}
                         ${t.Title ? '<span style="opacity:0.8;"> &middot; ' + escapeHtml(t.Title) + '</span>' : ''}
                         ${t.IsForced ? ' <span style="opacity:0.8;">[forced]</span>' : ''}</td>
-                    <td style="padding:0.2em 0.75em;">${escapeHtml(t.Codec)}</td>
+                    <td style="padding:0.2em 0.75em;">${escapeHtml(t.Codec)}${t.IsText ? '' : ' <span style="opacity:0.8;">(picture)</span>'}</td>
                     <td style="padding:0.2em 0.75em;">${t.CueCount || '—'}</td>
                     <td style="padding:0.2em 0.75em;">${escapeHtml(t.Status)}</td>
                   </tr>`).join('')
