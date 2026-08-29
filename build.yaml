@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 12
+version: 13
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -22,3 +22,5 @@ changelog: |-
     A subtitle that omits lines and holds them briefly no longer beats a fuller one.
   - Stop demoting subtitles whose filename does not state a language; only bilingual releases
     are ranked down now.
+  - Identify a subtitle's language by reading it rather than by parsing its filename, so an
+    untagged Japanese file is recognised and a bilingual one is caught however it is named.

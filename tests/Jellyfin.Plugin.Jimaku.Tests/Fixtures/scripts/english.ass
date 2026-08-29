@@ -1,0 +1,65 @@
+[Script Info]
+ScriptType: v4.00+
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:06.64,0:00:07.89,Default,,0000,0000,0000,,Are you okay?
+Dialogue: 0,0:00:07.89,0:00:09.97,Default,,0000,0000,0000,,Can you hear me?
+Dialogue: 0,0:00:09.95,0:00:13.54,On Top,,0000,0000,0000,,Unidentified male,\Nappears to be in his mid-thirties,
+Dialogue: 0,0:00:12.29,0:00:13.58,Default,,0000,0000,0000,,What a tragedy.
+Dialogue: 0,0:00:13.54,0:00:17.71,On Top,,0000,0000,0000,,hit by a truck, unconscious\Nand in critical condition.
+Dialogue: 0,0:00:13.58,0:00:15.04,Default,,0000,0000,0000,,He's done for.
+Dialogue: 0,0:00:17.73,0:00:19.94,Default,,0000,0000,0000,,The driver of the truck is unhurt.
+Dialogue: 0,0:00:19.94,0:00:23.03,Default,,0000,0000,0000,,Oh, yeah, I was hit by a...
+Dialogue: 0,0:00:26.82,0:00:29.66,Default,,0000,0000,0000,,Two high school students\Nthought to have also been hit
+Dialogue: 0,0:00:29.66,0:00:31.20,Default,,0000,0000,0000,,are currently missing.
+Dialogue: 0,0:00:31.20,0:00:32.58,Default,,0000,0000,0000,,A search is underway.
+Dialogue: 0,0:00:32.58,0:00:35.04,Default,,0000,0000,0000,,Requesting immediate backup. Over.
+Dialogue: 0,0:00:35.04,0:00:38.92,Default,,0000,0000,0000,,Did those three make it out okay?
+Dialogue: 0,0:00:38.92,0:00:42.21,Default,,0000,0000,0000,,He's heavy! Be careful!
+Dialogue: 0,0:00:42.21,0:00:43.67,Default,,0000,0000,0000,,You bet I am.
+Dialogue: 0,0:00:43.67,0:00:48.68,Default,,0000,0000,0000,,I've been a recluse for 20 years.\NI just had to bang on the floor for food.
+Dialogue: 0,0:00:48.68,0:00:51.77,Default,,0000,0000,0000,,Zenith! Anipa bayhebu! La took!
+Dialogue: 0,0:00:51.77,0:00:53.27,Default,,0000,0000,0000,,Hm?
+Dialogue: 0,0:00:57.35,0:00:59.36,Default,,0000,0000,0000,,Do you know where you are?
+Dialogue: 0,0:00:59.36,0:01:02.53,Default,,0000,0000,0000,,Pipe down. You don't have to shout.
+Dialogue: 0,0:01:02.53,0:01:05.78,Default,,0000,0000,0000,,Epabuhia! Akunaja taku! La took!
+Dialogue: 0,0:01:05.78,0:01:07.41,Default,,0000,0000,0000,,Huh? What?
+Dialogue: 0,0:01:07.41,0:01:08.28,Default,,0000,0000,0000,,Blood pressure dropping!
+Dialogue: 0,0:01:08.28,0:01:09.57,Default,,0000,0000,0000,,Prepare a transfusion!
+Dialogue: 0,0:01:09.57,0:01:10.83,Default,,0000,0000,0000,,Can you hear me?
+Dialogue: 0,0:01:10.83,0:01:12.58,Default,,0000,0000,0000,,Do you know your name?
+Dialogue: 0,0:01:12.58,0:01:13.79,Default,,0000,0000,0000,,Can you speak?
+Dialogue: 0,0:01:13.79,0:01:16.87,Default,,0000,0000,0000,,Huh? Am I dying?
+Dialogue: 0,0:01:16.87,0:01:20.59,Default,,0000,0000,0000,,Oh, well, my life was basically over anyway.
+Dialogue: 0,0:01:22.00,0:01:25.59,Default,,0000,0000,0000,,I wish I could've at least lost my virginity.
+Dialogue: 0,0:01:26.59,0:01:30.22,Default,,0000,0000,0000,,Epabuhia! Tauwka seio kwa! Pahail za!
+Dialogue: 0,0:01:30.22,0:01:33.52,Default,,0000,0000,0000,,Ivin kav Zenith! Pahail za!
+Dialogue: 0,0:01:36.64,0:01:38.65,Default,,0000,0000,0000,,Ow, my eyes!
+Dialogue: 0,0:01:38.65,0:01:41.02,Default,,0000,0000,0000,,Am I still alive?
+Dialogue: 0,0:01:42.42,0:01:47.51,On Top,,0000,0000,0000,,Zevaiah bazalfben kifu zivaikah kwav!
+Dialogue: 0,0:01:43.21,0:01:45.30,Default,,0000,0000,0000,,Hey, who's this guy?
+Dialogue: 0,0:01:47.53,0:01:48.86,Default,,0000,0000,0000,,Seriously?
+Dialogue: 0,0:01:48.84,0:01:50.97,Default,,0000,0000,0000,,I'm 100-plus kilos, and he lifted me like...
+Dialogue: 0,0:01:50.34,0:01:54.07,On Top,,0000,0000,0000,,Bukay aiha naiboo!
+Dialogue: 0,0:01:50.97,0:01:52.18,Default,,0000,0000,0000,,Whoa! What the hell?!
+Dialogue: 0,0:01:52.18,0:01:54.06,Default,,0000,0000,0000,,Stop! That's gross!
+Dialogue: 0,0:01:55.10,0:01:57.31,Default,,0000,0000,0000,,What the hell? Give me a break.
+Dialogue: 0,0:01:56.52,0:02:00.56,On Top,,0000,0000,0000,,Zenith, tipen, eyuji, tawka paihail kwa.
+Dialogue: 0,0:01:58.39,0:01:59.40,Default,,0000,0000,0000,,Whoa.
+Dialogue: 0,0:01:59.40,0:02:01.73,Default,,0000,0000,0000,,What's she blushing like that for?
+Dialogue: 0,0:02:04.17,0:02:06.01,Default,,0000,0000,0000,,Her tits are huge.
+Dialogue: 0,0:02:06.01,0:02:08.17,Default,,0000,0000,0000,,Evun on. Nora iv aihen kap.
+Dialogue: 0,0:02:08.17,0:02:09.84,Default,,0000,0000,0000,,What language is that?
+Dialogue: 0,0:02:09.84,0:02:14.01,Default,,0000,0000,0000,,Wait, where am I? This isn't a hospital?
+Dialogue: 0,0:02:14.01,0:02:17.81,Default,,0000,0000,0000,,What the hell is he doing?\NI'm seriously injured.
+Dialogue: 0,0:02:17.81,0:02:19.23,Default,,0000,0000,0000,,Still, she's gorgeous.
+Dialogue: 0,0:02:19.23,0:02:20.73,Default,,0000,0000,0000,,Is she European?
+Dialogue: 0,0:02:20.73,0:02:24.40,Default,,0000,0000,0000,,If you leave yourself that open,\NI might cop a feel.
+Dialogue: 0,0:02:26.28,0:02:27.78,Default,,0000,0000,0000,,Huh?
+Dialogue: 0,0:02:41.96,0:02:45.46,Default,,0000,0000,0000,,It looks like I got reincarnated.
+Dialogue: 0,0:02:45.46,0:02:49.47,Default,,0000,0000,0000,,I can't believe something\Nthat crazy happened for real.
+Dialogue: 0,0:02:49.45,0:02:53.20,Default,,0000,0000,0000,,Paul and Zenith. In their mid-20s, I'd guess.
+Dialogue: 0,0:02:51.11,0:02:52.28,On Top,,0000,0000,0000,,Moraiha kwa.
+Dialogue: 0,0:02:52.28,0:02:53.20,On Top,,0000,0000,0000,,Zai.
+Dialogue: 0,0:02:53.20,0:02:55.97,On Top,,0000,0000,0000,,Tawkah, za iksalaib.

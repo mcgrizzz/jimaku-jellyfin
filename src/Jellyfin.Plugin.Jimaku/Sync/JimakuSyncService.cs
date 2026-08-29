@@ -255,6 +255,28 @@ public sealed class JimakuSyncService(
                 continue;
             }
 
+            // Now the file is in hand, judge its language by reading it. The filename was only
+            // ever a guess, and it is wrong in both directions: a correct Japanese subtitle
+            // carrying no tag was ranked below a worse one that happened to say "[JPN]".
+            var byContent = SubtitleScriptAnalyzer.Classify(document);
+            if (byContent != SubtitleLanguages.Unknown && byContent != candidate.Languages)
+            {
+                logger.LogDebug(
+                    "{File}: filename suggested {FromName}, content says {FromContent} ({Profile}).",
+                    fileName,
+                    candidate.Languages,
+                    byContent,
+                    SubtitleScriptAnalyzer.Describe(SubtitleScriptAnalyzer.Profile(document)));
+
+                candidate.Languages = byContent;
+            }
+
+            if (candidate.Languages == SubtitleLanguages.NoJapanese)
+            {
+                logger.LogInformation("Skipping {File}: it contains no Japanese.", fileName);
+                continue;
+            }
+
             var alignment = Evaluate(candidate, document, reference, aligner, options);
             candidate.Alignment = alignment;
             measured.Add((candidate, document, fileName));
