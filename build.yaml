@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 16
+version: 17
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,15 +16,13 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Tell the client when a subtitle is actually attached. Jellyfin's own dialog says "download
-    queued" and then nothing; the plugin now sends its own message once the work is finished, and
-    records the outcome in Dashboard - Activity.
-  - Remember which release group works for a series. Once several episodes have been served
-    correctly by the same group, later episodes prefer it - but only to break a close call, never
-    over a measurably better match.
-  - Reuse a series' Jimaku search across its episodes. Searching once per episode spent half a
-    sweep's request budget re-asking a settled question.
-  - Cap the scheduled sweep and run it newest-first, with an option to only look at recently added
-    episodes. The rate limit was always respected; a first run could still saturate it for hours.
-  - Pick libraries to sweep with checkboxes. The multi-select gave no visible indication of what
-    was actually selected.
+  - Keep a record of what was attached to each episode. The sidecar's filename is derived from the
+    media file, so nothing on disk said which Jimaku upload it came from; the plugin now tracks
+    every attempt, and writes the source file name into the subtitle itself.
+  - Treat deleting a subtitle as rejecting it. That file is no longer chosen automatically for the
+    episode, and the credit it gave the series' preferred release group is taken back. Picking it
+    explicitly still works.
+  - Remove the subtitle being replaced instead of leaving it behind under a ".1." counter, so an
+    episode stops accumulating sidecars the player can choose between. Only ever a file the plugin
+    recorded writing, or one carrying its own stamp.
+  - Add a "what's attached?" view per episode, with a button to reject the current subtitle.

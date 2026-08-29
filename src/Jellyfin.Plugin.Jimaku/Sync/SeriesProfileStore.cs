@@ -148,6 +148,40 @@ public sealed class SeriesProfileStore(ILogger<SeriesProfileStore> logger)
     }
 
     /// <summary>
+    /// Folds a rejection into a profile: the user threw away a file this group produced.
+    /// </summary>
+    /// <remarks>
+    /// The counterweight to <see cref="RecordSuccess"/>, and the reason it is needed: successes are
+    /// judged by correlation, which cannot see that a translation reads badly or that the timing
+    /// slips somewhere the sampling did not look. Only the person watching can see that, and
+    /// discarding the file is how they say so. One rejection spends one confirmation - enough to
+    /// move a preference that keeps disappointing, not enough for a single odd episode to undo a
+    /// season of agreement.
+    /// </remarks>
+    /// <param name="profile">The profile to update, in place.</param>
+    /// <param name="releaseGroup">The release group of the file that was thrown away.</param>
+    public static void RecordRejection(SeriesProfile profile, string? releaseGroup)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        var group = releaseGroup?.Trim() ?? string.Empty;
+        if (group.Length == 0
+            || !string.Equals(group, profile.PreferredReleaseGroup, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        profile.UpdatedUtc = DateTimeOffset.UtcNow;
+        profile.Confirmations = Math.Max(0, profile.Confirmations - 1);
+
+        if (profile.Confirmations == 0)
+        {
+            profile.PreferredReleaseGroup = string.Empty;
+            profile.PreferredEntryId = 0;
+        }
+    }
+
+    /// <summary>
     /// Decides whether a candidate is the one this series has been served by.
     /// </summary>
     /// <param name="profile">The profile, or null when the series has no history.</param>

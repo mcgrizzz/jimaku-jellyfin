@@ -46,6 +46,15 @@ public class CandidateDto
     /// <summary>Gets or sets why the file was rejected, if it was.</summary>
     public string RejectedBecause { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether this file was attached to this episode before and
+    /// then thrown away. Automatic selection skips it; picking it explicitly still works.
+    /// </summary>
+    public bool PreviouslyRejected { get; set; }
+
+    /// <summary>Gets or sets the release group parsed from the file name, if it named one.</summary>
+    public string ReleaseGroup { get; set; } = string.Empty;
+
     /// <summary>Gets or sets the timing verdict, when this candidate was actually measured.</summary>
     public string? Verdict { get; set; }
 
@@ -128,4 +137,58 @@ public class ApplyRequest
     /// verified. Only ever set by an explicit user choice.
     /// </summary>
     public bool ApplyEvenIfUnverified { get; set; }
+}
+
+/// <summary>
+/// One thing that was tried for an episode.
+/// </summary>
+public class AttemptDto
+{
+    /// <summary>Gets or sets when it was tried.</summary>
+    public DateTimeOffset AttemptedUtc { get; set; }
+
+    /// <summary>Gets or sets how it ended up: applied, superseded, rejected or declined.</summary>
+    public string Status { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the timing verdict.</summary>
+    public string Verdict { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the Jimaku file name, which the sidecar's own name does not preserve.</summary>
+    public string FileName { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the release group, if the name gave one.</summary>
+    public string ReleaseGroup { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the Jimaku entry it came from.</summary>
+    public long EntryId { get; set; }
+
+    /// <summary>Gets or sets the sidecar that was written, if any.</summary>
+    public string SidecarPath { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the correction applied, for display.</summary>
+    public string Correction { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets the correlation achieved.</summary>
+    public double Correlation { get; set; }
+
+    /// <summary>Gets or sets the explanation.</summary>
+    public string Reason { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// What the plugin has done to one episode, and what it has been told not to do again.
+/// </summary>
+public class EpisodeHistoryDto
+{
+    /// <summary>Gets or sets the subtitle currently attached by this plugin, if any.</summary>
+    public AttemptDto? Current { get; set; }
+
+    /// <summary>Gets or sets everything that has been tried, newest first.</summary>
+    public IReadOnlyList<AttemptDto> Attempts { get; set; } = Array.Empty<AttemptDto>();
+
+    /// <summary>Gets or sets the file names automatic selection will now skip.</summary>
+    public IReadOnlyList<string> RejectedFileNames { get; set; } = Array.Empty<string>();
+
+    /// <summary>Gets or sets the sidecar files presently on disk for this episode.</summary>
+    public IReadOnlyList<string> SidecarsOnDisk { get; set; } = Array.Empty<string>();
 }

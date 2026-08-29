@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.Jimaku.Timing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
@@ -111,6 +113,140 @@ public sealed class SidecarWriter(
         return SidecarNaming.Resolve(folder, item.Path, languageTag, extension, overwrite, File.Exists);
     }
 
+
+    /// <summary>
+    /// Lists the subtitle sidecars for an item that this plugin could have written.
+    /// </summary>
+    /// <remarks>
+    /// Used to tell "the user deleted what we attached" from "we never attached anything". The
+    /// match is by naming convention rather than by remembered path, because the native subtitle
+    /// flow has core write the file and never tells the plugin where it landed.
+    /// </remarks>
+    /// <param name="item">The media item.</param>
+    /// <param name="languageTag">The language tag the sidecar would carry.</param>
+    /// <returns>The matching paths, which may be empty.</returns>
+    public IReadOnlyList<string> FindExisting(BaseItem item, string languageTag)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (string.IsNullOrEmpty(item.Path))
+        {
+            return [];
+        }
+
+        var baseName = Path.GetFileNameWithoutExtension(item.Path);
+        var found = new List<string>();
+
+        foreach (var folder in CandidateFolders(item))
+        {
+            if (!Directory.Exists(folder))
+            {
+                continue;
+            }
+
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(folder, baseName + ".*"))
+                {
+                    if (SidecarNaming.LooksLikeOurs(path, baseName, languageTag))
+                    {
+                        found.Add(path);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogDebug(ex, "Could not list sidecars in {Folder}.", folder);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
+    /// Decides whether a subtitle file carries this plugin's provenance stamp.
+    /// </summary>
+    /// <remarks>
+    /// The native subtitle flow has core write the file and never says where, so a path is not
+    /// always available to match against. The stamp is: it is written by this plugin and nothing
+    /// else, which is what makes it safe to remove a file without a recorded path - a subtitle the
+    /// user placed by hand has no stamp and is left alone.
+    /// </remarks>
+    /// <param name="path">The file to test.</param>
+    /// <returns><see langword="true"/> when the file was written by this plugin.</returns>
+    public bool WasWrittenHere(string path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            // The stamp lives in the header, so there is no need to read a whole script.
+            var head = new char[4096];
+            using var reader = new StreamReader(path, detectEncodingFromByteOrderMarks: true);
+            var read = reader.ReadBlock(head, 0, head.Length);
+            return SubtitleProvenance.Read(new string(head, 0, read)) is not null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogDebug(ex, "Could not read {Path} to check for a provenance stamp.", path);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deletes a sidecar this plugin previously wrote.
+    /// </summary>
+    /// <remarks>
+    /// Only ever called with a path the plugin recorded writing itself. Without this, replacing a
+    /// subtitle left the old one behind under a <c>.1.</c> counter, so an episode accumulated files
+    /// and the player could pick any of them.
+    /// </remarks>
+    /// <param name="path">The path to remove.</param>
+    /// <returns><see langword="true"/> when a file was removed.</returns>
+    public bool TryDelete(string path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            return false;
+        }
+
+        libraryMonitor.ReportFileSystemChangeBeginning(path);
+        try
+        {
+            File.Delete(path);
+            logger.LogInformation("Removed the superseded sidecar {Path}", path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Could not remove the superseded sidecar {Path}.", path);
+            return false;
+        }
+        finally
+        {
+            libraryMonitor.ReportFileSystemChangeComplete(path, false);
+        }
+    }
+
+    private static IEnumerable<string> CandidateFolders(BaseItem item)
+    {
+        // Either location is possible depending on the library's SaveSubtitlesWithMedia setting,
+        // and that setting can change between one sync and the next.
+        var containing = item.ContainingFolderPath;
+        if (!string.IsNullOrEmpty(containing))
+        {
+            yield return containing;
+        }
+
+        var metadata = item.GetInternalMetadataPath();
+        if (!string.IsNullOrEmpty(metadata) && !string.Equals(metadata, containing, StringComparison.Ordinal))
+        {
+            yield return metadata;
+        }
+    }
 
     /// <summary>
     /// Re-probes the item so the new sidecar becomes a visible subtitle track.

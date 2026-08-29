@@ -180,6 +180,11 @@ public sealed class JimakuSyncService(
             return SyncResult.Fail("The episode has no readable media file.");
         }
 
+        // Deleting the sidecar is how a person says "not that one", and it is the only such signal
+        // available. Notice it before selecting anything, so this run does not simply download the
+        // rejected file again and call it a success.
+        await NoteRejectionAsync(episode, configuration, cancellationToken).ConfigureAwait(false);
+
         // Resolved once and reused: the episode number is needed again when opening an archive,
         // and the mapping lookup is not free.
         var lookup = await idResolver.ResolveAsync(episode, cancellationToken).ConfigureAwait(false);
@@ -210,15 +215,28 @@ public sealed class JimakuSyncService(
         else
         {
             candidates = (await FindCandidatesAsync(episode, cancellationToken).ConfigureAwait(false)).ToList();
-            usable = candidates.Where(c => c.IsUsable).ToList();
+
+            var rejected = history.RejectedFileNames(episode.Id);
+            foreach (var candidate in candidates)
+            {
+                candidate.PreviouslyRejected = rejected.Contains(candidate.File.Name);
+            }
+
+            usable = candidates.Where(c => c.IsUsable && !c.PreviouslyRejected).ToList();
         }
 
         if (usable.Count == 0)
         {
+            var wereRejected = candidates.Count(c => c.IsUsable && c.PreviouslyRejected);
+
             var result = SyncResult.Fail(
                 candidates.Count == 0
                     ? "Jimaku has no subtitles for this episode."
-                    : "Jimaku has files for this episode, but none of them are usable.");
+                    : wereRejected > 0
+                        ? string.Create(
+                            CultureInfo.InvariantCulture,
+                            $"Every usable file for this episode has already been tried and rejected ({wereRejected}). Pick one explicitly to override that.")
+                        : "Jimaku has files for this episode, but none of them are usable.");
             result.Candidates = candidates;
             await FinishAsync(episode, result, options, cancellationToken).ConfigureAwait(false);
             return result;
@@ -561,6 +579,30 @@ public sealed class JimakuSyncService(
 
         var extension = document.Kind == SubtitleFormatKind.Srt ? "srt" : "ass";
 
+        // The sidecar's name is dictated by Jellyfin's external-file resolver and cannot say where
+        // the file came from, so say it inside the file instead.
+        if (configuration.StampProvenance)
+        {
+            text = SubtitleProvenance.Stamp(
+                text,
+                document.Kind,
+                SubtitleProvenance.BuildLine(fileName, entryId, alignment.Transform, DateTimeOffset.UtcNow));
+        }
+
+        // Remove what this replaces before writing rather than after. The path resolver skips names
+        // already taken, so leaving the old file in place would push the new one onto a ".1."
+        // counter and leave two subtitles on the episode with nothing to choose between them. The
+        // corrected text is already in hand at this point, so the only thing that can still fail is
+        // the write itself. This runs for the provider flow too, where core does the writing
+        // moments later from the same text.
+        if (configuration.RemoveSupersededSidecars)
+        {
+            foreach (var previous in OwnedSidecars(episode, configuration.LanguageTag))
+            {
+                sidecarWriter.TryDelete(previous);
+            }
+        }
+
         string? path = null;
         if (options.WriteSidecar)
         {
@@ -590,6 +632,7 @@ public sealed class JimakuSyncService(
             SidecarPath = path,
             FileName = fileName,
             EntryId = entryId,
+            ReleaseGroup = ReleaseInfo.Parse(fileName).ReleaseGroup ?? string.Empty,
             Content = options.WriteSidecar ? null : text,
             Extension = extension,
             ReferenceSource = alignment.ReferenceSource,
@@ -834,21 +877,181 @@ public sealed class JimakuSyncService(
         await notifier.NotifyAsync(episode, result, options.Interactive, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Throws away the subtitle currently attached to an episode, and records that it was rejected.
+    /// </summary>
+    /// <remarks>
+    /// The explicit form of what deleting the file does implicitly. Worth having as an action
+    /// rather than leaving it to the filesystem: it removes the file, records why it went, and
+    /// takes back the credit the series preference gave it - which deleting through a file manager
+    /// only achieves on the next sync of that episode.
+    /// </remarks>
+    /// <param name="episode">The episode.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>What was rejected, or null when nothing was attached.</returns>
+    public async Task<SyncAttempt?> RejectCurrentAsync(Episode episode, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(episode);
+
+        var configuration = Configuration;
+        var owned = OwnedSidecars(episode, configuration.LanguageTag).ToList();
+
+        var rejected = await history.RejectCurrentAsync(episode.Id, cancellationToken).ConfigureAwait(false);
+        if (rejected is null)
+        {
+            return null;
+        }
+
+        var removed = owned.Count(sidecarWriter.TryDelete);
+
+        logger.LogInformation(
+            "Rejected {File} for {Name}; removed {Removed} sidecar(s) and will not offer it again.",
+            rejected.FileName,
+            episode.Name,
+            removed);
+
+        if (removed > 0)
+        {
+            await sidecarWriter.RefreshAsync(episode, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (configuration.UseSeriesPreference && episode.SeriesId != Guid.Empty)
+        {
+            var profile = profiles.Get(episode.SeriesId);
+            if (profile is not null)
+            {
+                SeriesProfileStore.RecordRejection(profile, rejected.ReleaseGroup);
+                await profiles.SaveAsync(episode.SeriesId, profile, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return rejected;
+    }
+
+    /// <summary>
+    /// Reads what has been tried for an episode.
+    /// </summary>
+    /// <param name="episode">The episode.</param>
+    /// <returns>The recorded history, or null when the episode has none.</returns>
+    public SyncHistoryEntry? GetHistory(Episode episode)
+    {
+        ArgumentNullException.ThrowIfNull(episode);
+        return history.Get(episode.Id);
+    }
+
+    /// <summary>
+    /// Lists the subtitle sidecars actually present for an episode.
+    /// </summary>
+    /// <param name="episode">The episode.</param>
+    /// <param name="languageTag">The language tag the sidecar would carry.</param>
+    /// <returns>The paths on disk.</returns>
+    public IReadOnlyList<string> FindSidecars(Episode episode, string languageTag) =>
+        sidecarWriter.FindExisting(episode, languageTag);
+
+    /// <summary>
+    /// Puts previously rejected files back on the table for an episode.
+    /// </summary>
+    /// <param name="episode">The episode.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the write.</returns>
+    public Task ClearRejectionsAsync(Episode episode, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(episode);
+        return history.ClearRejectionsAsync(episode.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Lists the sidecars on disk that this plugin is entitled to remove.
+    /// </summary>
+    /// <remarks>
+    /// Two independent sources of ownership, because neither covers everything. A recorded path
+    /// covers what the plugin wrote itself. The provenance stamp covers the native subtitle flow,
+    /// where core writes the file and never says where - and it is the stamp, not the naming, that
+    /// makes this safe: a subtitle the user placed by hand carries neither and is left alone.
+    /// </remarks>
+    private IEnumerable<string> OwnedSidecars(Episode episode, string languageTag)
+    {
+        var recorded = history.AppliedSidecarPaths(episode.Id);
+
+        foreach (var path in recorded)
+        {
+            yield return path;
+        }
+
+        foreach (var path in sidecarWriter.FindExisting(episode, languageTag))
+        {
+            if (!recorded.Contains(path, StringComparer.Ordinal) && sidecarWriter.WasWrittenHere(path))
+            {
+                yield return path;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Treats a vanished sidecar as a rejection of whatever produced it.
+    /// </summary>
+    private async Task NoteRejectionAsync(
+        Episode episode,
+        PluginConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        // Either signal counts as "still there". The naming scan misses hand-renamed variants and
+        // the recorded path misses the provider flow, so requiring both would report deletions that
+        // never happened - and a false rejection quietly removes a good file from consideration.
+        var present = sidecarWriter.FindExisting(episode, configuration.LanguageTag).Count > 0
+            || history.AppliedSidecarPaths(episode.Id).Any(File.Exists);
+
+        var rejected = await history.NoteDeletionAsync(episode.Id, present, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (rejected is null)
+        {
+            return;
+        }
+
+        logger.LogInformation(
+            "The subtitle previously attached to {Name} is gone ({File}); treating that as a rejection and not offering it again.",
+            episode.Name,
+            rejected.FileName);
+
+        if (!configuration.UseSeriesPreference || episode.SeriesId == Guid.Empty)
+        {
+            return;
+        }
+
+        var profile = profiles.Get(episode.SeriesId);
+        if (profile is null)
+        {
+            return;
+        }
+
+        var before = profile.PreferredReleaseGroup;
+        SeriesProfileStore.RecordRejection(profile, rejected.ReleaseGroup);
+
+        if (!string.Equals(before, profile.PreferredReleaseGroup, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("{Series} no longer prefers {Group}.", episode.SeriesName, before);
+        }
+
+        await profiles.SaveAsync(episode.SeriesId, profile, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task RecordAsync(Episode episode, SyncResult result, CancellationToken cancellationToken)
     {
-        await history.SetAsync(
+        await history.RecordAttemptAsync(
             episode.Id,
-            new SyncHistoryEntry
+            new SyncAttempt
             {
                 AttemptedUtc = DateTimeOffset.UtcNow,
                 Verdict = result.Verdict,
+                Status = result.Applied ? AttemptStatus.Applied : AttemptStatus.Declined,
                 EntryId = result.EntryId,
                 FileName = result.FileName ?? string.Empty,
+                ReleaseGroup = result.ReleaseGroup,
+                SidecarPath = result.SidecarPath ?? string.Empty,
                 OffsetSeconds = result.Transform.OffsetSeconds,
                 Scale = result.Transform.Scale,
                 Correlation = result.Correlation,
-                PeakRatio = result.PeakRatio,
-                SidecarPath = result.SidecarPath ?? string.Empty,
                 Reason = result.Message,
             },
             cancellationToken).ConfigureAwait(false);

@@ -42,6 +42,12 @@ public sealed class SubtitleCandidate
     public string? ReleaseGroup { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this file was attached to this episode before and
+    /// then thrown away. Automatic selection skips these; an explicit pick still overrides it.
+    /// </summary>
+    public bool PreviouslyRejected { get; set; }
+
+    /// <summary>
     /// Gets or sets the timing verdict, populated only once the file has actually been downloaded
     /// and analysed. Listing candidates deliberately skips this so the UI stays responsive.
     /// </summary>
@@ -76,6 +82,9 @@ public sealed class SyncResult
     /// learn which entry keeps working for a series whose filenames name no release group.
     /// </summary>
     public long EntryId { get; set; }
+
+    /// <summary>Gets or sets the release group of the chosen file, when its name gave one.</summary>
+    public string ReleaseGroup { get; set; } = string.Empty;
 
     /// <summary>Gets or sets how the timing reference was obtained.</summary>
     public string ReferenceSource { get; set; } = string.Empty;

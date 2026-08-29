@@ -5,7 +5,8 @@ const FIELDS = {
         'EnableScheduledTask', 'OverwriteExisting', 'AllowArchives',
         'EnableFramerateCorrection', 'AllowPiecewiseOnDemand', 'AllowPiecewiseScheduled',
         'EnableAudioFallback', 'DetectReferenceBias',
-        'ShowClientNotifications', 'WriteActivityLog', 'UseSeriesPreference'
+        'ShowClientNotifications', 'WriteActivityLog', 'UseSeriesPreference',
+        'RemoveSupersededSidecars', 'StampProvenance'
     ],
     number: [
         'MinCorrelation', 'MinOnsetCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',
@@ -163,6 +164,8 @@ function loadEpisodes(view, seriesId, seriesName) {
                     <span>Fetch best</span></button>
                 <button is="emby-button" type="button" class="raised jimaku-list" data-id="${item.Id}">
                     <span>Show candidates</span></button>
+                <button is="emby-button" type="button" class="raised jimaku-history" data-id="${item.Id}">
+                    <span>What's attached?</span></button>
             </div>`;
         }
 
@@ -238,6 +241,10 @@ function renderCandidates(view, candidates, itemId) {
             : escapeHtml(c.RejectedBecause || '');
 
         // Entry notes frequently say which release the subtitles were timed for.
+        const rejectedMark = c.PreviouslyRejected
+            ? '<span title="you rejected this file for this episode; it is skipped automatically but can still be picked" '
+              + 'style="opacity:0.75;">[rejected] </span>' : '';
+
         const notes = c.EntryNotes
             ? `<div style="opacity:0.75;font-size:0.9em;">${escapeHtml(c.EntryNotes)}</div>` : '';
         const unverified = c.EntryUnverified
@@ -255,7 +262,7 @@ function renderCandidates(view, candidates, itemId) {
             : '<span style="opacity:0.6;">not measured</span>';
 
         return `<tr style="vertical-align:top;">
-            <td style="padding:0.25em 0.75em 0.25em 0;">${unverified}${escapeHtml(c.FileName)}${notes}</td>
+            <td style="padding:0.25em 0.75em 0.25em 0;">${rejectedMark}${unverified}${escapeHtml(c.FileName)}${notes}</td>
             <td style="padding:0.25em 0.75em;">${c.NameScore}</td>
             <td style="padding:0.25em 0.75em;">${timing}</td>
             <td style="padding:0.25em 0;">${action}</td>
@@ -273,6 +280,90 @@ function renderCandidates(view, candidates, itemId) {
         </p>`;
 }
 
+const STATUS_TEXT = {
+    Applied: 'attached now',
+    Superseded: 'replaced by a later one',
+    Rejected: 'rejected',
+    Declined: 'not written'
+};
+
+function renderHistory(view, itemId, history) {
+    const container = view.querySelector('#HistoryResults');
+
+    const attempts = history.Attempts || [];
+    if (!attempts.length && !(history.SidecarsOnDisk || []).length) {
+        container.innerHTML = '<p class="fieldDescription">Nothing has been attached to this episode yet.</p>';
+        return;
+    }
+
+    let html = '';
+
+    if (history.Current) {
+        const c = history.Current;
+        html += `<div style="margin-bottom:0.5em;">
+            <strong>Currently attached:</strong> ${escapeHtml(c.FileName)}
+            ${c.ReleaseGroup ? ' <span style="opacity:0.75;">(' + escapeHtml(c.ReleaseGroup) + ')</span>' : ''}
+            <div style="opacity:0.8;">${escapeHtml(c.Verdict)} &middot; ${escapeHtml(c.Correction)} &middot; entry ${c.EntryId}</div>
+            <button is="emby-button" type="button" class="raised jimaku-reject" data-id="${itemId}"
+                    style="margin-top:0.4em;"
+                    title="Delete this subtitle, stop offering it for this episode, and take back the credit it gave this series' preferred group">
+                <span>This one is bad &mdash; reject it</span></button>
+        </div>`;
+    }
+
+    if (attempts.length) {
+        html += '<table style="width:100%;border-collapse:collapse;"><thead><tr style="text-align:left;">'
+             + '<th style="padding-right:0.75em;">Tried</th><th style="padding:0 0.75em;">File</th>'
+             + '<th style="padding:0 0.75em;">Outcome</th></tr></thead><tbody>'
+             + attempts.map(a => `<tr style="vertical-align:top;${a.Status === 'Rejected' ? 'opacity:0.6;' : ''}">
+                    <td style="padding:0.25em 0.75em 0.25em 0;white-space:nowrap;">${escapeHtml((a.AttemptedUtc || '').slice(0, 10))}</td>
+                    <td style="padding:0.25em 0.75em;">${escapeHtml(a.FileName || '—')}</td>
+                    <td style="padding:0.25em 0.75em;">${escapeHtml(STATUS_TEXT[a.Status] || a.Status)}
+                        <div style="opacity:0.75;font-size:0.9em;">${escapeHtml(a.Reason || '')}</div></td>
+                  </tr>`).join('')
+             + '</tbody></table>';
+    }
+
+    const disk = history.SidecarsOnDisk || [];
+    if (disk.length) {
+        html += '<div class="fieldDescription" style="margin-top:0.5em;">On disk: '
+             + disk.map(d => '<code>' + escapeHtml(d.split(/[\\/]/).pop()) + '</code>').join(', ') + '</div>';
+    }
+
+    if ((history.RejectedFileNames || []).length) {
+        html += `<div class="fieldDescription" style="margin-top:0.5em;">
+            Skipping ${history.RejectedFileNames.length} rejected file(s) when choosing automatically.
+            <button is="emby-button" type="button" class="raised jimaku-clear-rejections" data-id="${itemId}"
+                    style="margin-left:0.5em;"><span>Consider them again</span></button></div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function loadHistory(view, itemId) {
+    return ApiClient.ajax({
+        type: 'GET',
+        url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/History`),
+        dataType: 'json'
+    }).then(history => renderHistory(view, itemId, history))
+      .catch(() => { view.querySelector('#HistoryResults').innerHTML = ''; });
+}
+
+function rejectCurrent(view, itemId, url, label) {
+    const status = view.querySelector('#ActionStatus');
+    status.textContent = label;
+
+    ApiClient.ajax({
+        type: 'POST',
+        url: ApiClient.getUrl(url),
+        dataType: 'json'
+    }).then(history => {
+        status.textContent = 'Done.';
+        renderHistory(view, itemId, history);
+        view.querySelector('#CandidateResults').innerHTML = '';
+    }).catch(err => showError(view, err));
+}
+
 function runAuto(view, itemId) {
     const status = view.querySelector('#ActionStatus');
     status.textContent = 'Searching, downloading and verifying… this can take a minute if the audio has to be analysed.';
@@ -282,7 +373,7 @@ function runAuto(view, itemId) {
         type: 'POST',
         url: ApiClient.getUrl(`Jellyfin.Plugin.Jimaku/Episodes/${itemId}/Auto`),
         dataType: 'json'
-    }).then(result => renderResult(view, result))
+    }).then(result => { renderResult(view, result); return loadHistory(view, itemId); })
       .catch(err => showError(view, err));
 }
 
@@ -297,6 +388,7 @@ function listCandidates(view, itemId) {
     }).then(candidates => {
         status.textContent = `${candidates.length} file(s) found.`;
         renderCandidates(view, candidates, itemId);
+        return loadHistory(view, itemId);
     }).catch(err => showError(view, err));
 }
 
@@ -315,7 +407,7 @@ function applyCandidate(view, button) {
         }),
         contentType: 'application/json',
         dataType: 'json'
-    }).then(result => renderResult(view, result))
+    }).then(result => { renderResult(view, result); return loadHistory(view, button.dataset.id); })
       .catch(err => showError(view, err));
 }
 
@@ -352,6 +444,33 @@ export default function (view) {
 
         const auto = e.target.closest('.jimaku-auto');
         if (auto) { runAuto(view, auto.dataset.id); return; }
+
+        const reject = e.target.closest('.jimaku-reject');
+        if (reject) {
+            rejectCurrent(
+                view,
+                reject.dataset.id,
+                `Jellyfin.Plugin.Jimaku/Episodes/${reject.dataset.id}/Reject`,
+                'Removing it…');
+            return;
+        }
+
+        const clear = e.target.closest('.jimaku-clear-rejections');
+        if (clear) {
+            rejectCurrent(
+                view,
+                clear.dataset.id,
+                `Jellyfin.Plugin.Jimaku/Episodes/${clear.dataset.id}/ClearRejections`,
+                'Clearing…');
+            return;
+        }
+
+        const showHistory = e.target.closest('.jimaku-history');
+        if (showHistory) {
+            view.querySelector('#CandidateResults').innerHTML = '';
+            loadHistory(view, showHistory.dataset.id);
+            return;
+        }
 
         const list = e.target.closest('.jimaku-list');
         if (list) { listCandidates(view, list.dataset.id); return; }

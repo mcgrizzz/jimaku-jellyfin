@@ -250,4 +250,26 @@ public class PluginConfiguration : BasePluginConfiguration
     /// both far cheaper and what most libraries actually need day to day.
     /// </remarks>
     public int OnlySweepEpisodesAddedWithinDays { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the plugin removes the sidecar it is replacing.
+    /// </summary>
+    /// <remarks>
+    /// Only ever a file the plugin recorded writing itself; a subtitle placed by hand is never
+    /// touched. Without this, replacing a subtitle left the old one behind under a ".1." counter,
+    /// so an episode accumulated files and the player could pick any of them - which is exactly
+    /// what makes a re-download look like it did nothing.
+    /// </remarks>
+    public bool RemoveSupersededSidecars { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether written subtitles carry a comment naming the Jimaku
+    /// file they came from.
+    /// </summary>
+    /// <remarks>
+    /// The sidecar's own filename is dictated by Jellyfin's resolver and cannot carry it, so
+    /// without this there is nothing on disk that distinguishes one upload's timing from another's.
+    /// ASS only; SubRip has no comment syntax.
+    /// </remarks>
+    public bool StampProvenance { get; set; } = true;
 }

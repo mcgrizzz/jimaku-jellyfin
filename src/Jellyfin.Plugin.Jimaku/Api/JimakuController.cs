@@ -166,6 +166,81 @@ public class JimakuController(
     }
 
     /// <summary>
+    /// Reports what the plugin has attached to an episode, and what it has already tried.
+    /// </summary>
+    /// <remarks>
+    /// The sidecar's filename is derived from the media file, so nothing on disk records which
+    /// Jimaku upload it came from. This does.
+    /// </remarks>
+    /// <param name="itemId">The episode's item ID.</param>
+    /// <returns>The recorded history.</returns>
+    [HttpGet("Jellyfin.Plugin.Jimaku/Episodes/{itemId}/History")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public ActionResult<EpisodeHistoryDto> GetHistory([FromRoute] Guid itemId)
+    {
+        if (libraryManager.GetItemById(itemId) is not Episode episode)
+        {
+            return NotFound("That item is not an episode.");
+        }
+
+        return Ok(BuildHistory(episode));
+    }
+
+    /// <summary>
+    /// Throws away the subtitle currently attached to an episode.
+    /// </summary>
+    /// <remarks>
+    /// Removes the file, records the rejection so automatic selection stops offering it, and takes
+    /// back the credit it gave the series' release-group preference.
+    /// </remarks>
+    /// <param name="itemId">The episode's item ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The updated history.</returns>
+    [HttpPost("Jellyfin.Plugin.Jimaku/Episodes/{itemId}/Reject")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EpisodeHistoryDto>> Reject(
+        [FromRoute] Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        if (libraryManager.GetItemById(itemId) is not Episode episode)
+        {
+            return NotFound("That item is not an episode.");
+        }
+
+        var rejected = await syncService.RejectCurrentAsync(episode, cancellationToken).ConfigureAwait(false);
+        if (rejected is null)
+        {
+            return NotFound("This plugin has not attached a subtitle to that episode.");
+        }
+
+        return Ok(BuildHistory(episode));
+    }
+
+    /// <summary>
+    /// Puts previously rejected files back on the table for an episode.
+    /// </summary>
+    /// <param name="itemId">The episode's item ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The updated history.</returns>
+    [HttpPost("Jellyfin.Plugin.Jimaku/Episodes/{itemId}/ClearRejections")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<EpisodeHistoryDto>> ClearRejections(
+        [FromRoute] Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        if (libraryManager.GetItemById(itemId) is not Episode episode)
+        {
+            return NotFound("That item is not an episode.");
+        }
+
+        await syncService.ClearRejectionsAsync(episode, cancellationToken).ConfigureAwait(false);
+        return Ok(BuildHistory(episode));
+    }
+
+    /// <summary>
     /// Checks that a Jimaku API key is accepted.
     /// </summary>
     /// <param name="body">The key to test, or empty to test the saved one.</param>
@@ -200,6 +275,49 @@ public class JimakuController(
         }
     }
 
+    private EpisodeHistoryDto BuildHistory(Episode episode)
+    {
+        var entry = syncService.GetHistory(episode);
+        var languageTag = Plugin.Instance?.Configuration.LanguageTag ?? "jpn";
+
+        // Both halves matter and they can disagree: the record says what the plugin believes is
+        // attached, the disk says what actually is. A file removed outside the plugin shows up as
+        // exactly that difference.
+        var onDisk = syncService.FindSidecars(episode, languageTag);
+
+        if (entry is null)
+        {
+            return new EpisodeHistoryDto { SidecarsOnDisk = onDisk };
+        }
+
+        var attempts = entry.Attempts
+            .Select(ToDto)
+            .Reverse()
+            .ToList();
+
+        return new EpisodeHistoryDto
+        {
+            Current = attempts.Find(a => string.Equals(a.Status, nameof(AttemptStatus.Applied), StringComparison.Ordinal)),
+            Attempts = attempts,
+            RejectedFileNames = entry.RejectedFileNames,
+            SidecarsOnDisk = onDisk,
+        };
+    }
+
+    private static AttemptDto ToDto(SyncAttempt attempt) => new()
+    {
+        AttemptedUtc = attempt.AttemptedUtc,
+        Status = attempt.Status.ToString(),
+        Verdict = attempt.Verdict.ToString(),
+        FileName = attempt.FileName,
+        ReleaseGroup = attempt.ReleaseGroup,
+        EntryId = attempt.EntryId,
+        SidecarPath = attempt.SidecarPath,
+        Correction = new Timing.TimingTransform(attempt.Scale, attempt.OffsetSeconds).Describe(),
+        Correlation = attempt.Correlation,
+        Reason = attempt.Reason,
+    };
+
     private static CandidateDto ToDto(SubtitleCandidate candidate) => new()
     {
         EntryId = candidate.EntryId,
@@ -212,6 +330,8 @@ public class JimakuController(
         NameScore = candidate.NameMatch.Score,
         NameNotes = candidate.NameMatch.Notes,
         Usable = candidate.IsUsable,
+        PreviouslyRejected = candidate.PreviouslyRejected,
+        ReleaseGroup = candidate.ReleaseGroup ?? string.Empty,
         RejectedBecause = candidate.NameMatch.EpisodeMismatch
             ? candidate.NameMatch.Notes
             : new Matching.FilteredCandidate(candidate.File, candidate.Rejection).Explain(),

@@ -40,6 +40,39 @@ public static class SidecarNaming
     }
 
     /// <summary>
+    /// Decides whether a file on disk is a sidecar of the shape this plugin writes.
+    /// </summary>
+    /// <remarks>
+    /// Accepts both the plain name and core's de-duplicated <c>.1.</c> form, since either could
+    /// have been produced - by this plugin directly, or by core saving what the subtitle provider
+    /// returned.
+    /// </remarks>
+    /// <param name="path">The file to test.</param>
+    /// <param name="baseName">The media file's name without its extension.</param>
+    /// <param name="languageTag">The language tag.</param>
+    /// <returns><see langword="true"/> when the name matches.</returns>
+    public static bool LooksLikeOurs(string path, string baseName, string languageTag)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+        if (extension is not ("ass" or "ssa" or "srt"))
+        {
+            return false;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(path);
+        if (!name.StartsWith(baseName + ".", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // The resolver reads tokens right to left and takes the first language it recognises, so
+        // ours is always the final token. Anything else is somebody else's file.
+        return name.EndsWith("." + languageTag, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Resolves the full path to write to, avoiding an existing file unless told to overwrite.
     /// </summary>
     /// <param name="folder">The directory to write into.</param>

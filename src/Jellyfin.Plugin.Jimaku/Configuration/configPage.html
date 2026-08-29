@@ -276,6 +276,26 @@
           <legend>Series memory</legend>
 
           <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="RemoveSupersededSidecars" />
+            <span>Remove the subtitle being replaced</span>
+          </label>
+          <div class="fieldDescription">
+            Only ever a file this plugin recorded writing, or one carrying its own stamp; a subtitle
+            you placed yourself is never touched. Without this, replacing a subtitle leaves the old
+            one behind under a <code>.1.</code> counter and the player may pick either.
+          </div>
+
+          <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="StampProvenance" />
+            <span>Write the source file name into the subtitle</span>
+          </label>
+          <div class="fieldDescription">
+            The sidecar's own name is dictated by Jellyfin and cannot record which Jimaku upload it
+            came from, so a comment in the file says it instead. ASS only &mdash; SubRip has no
+            comment syntax.
+          </div>
+
+          <label class="checkboxContainer">
             <input is="emby-checkbox" type="checkbox" id="UseSeriesPreference" />
             <span>Prefer the release group that already works for a series</span>
           </label>
@@ -319,6 +339,7 @@
 
         <div id="EpisodeResults"></div>
         <div id="ActionStatus" class="fieldDescription" style="margin-top:1em;"></div>
+        <div id="HistoryResults" style="margin-top:1em;"></div>
         <div id="CandidateResults" style="margin-top:1em;"></div>
       </fieldset>
 

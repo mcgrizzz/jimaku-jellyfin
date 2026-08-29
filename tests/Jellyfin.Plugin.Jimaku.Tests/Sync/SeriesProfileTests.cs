@@ -147,6 +147,66 @@ public class SeriesProfileTests
     }
 
     [Fact]
+    public void RejectingAFileTakesBackTheCreditItsGroupWasGiven()
+    {
+        var profile = new SeriesProfile();
+        for (var i = 0; i < 4; i++)
+        {
+            SeriesProfileStore.RecordSuccess(profile, "AnimeOut", 100);
+        }
+
+        SeriesProfileStore.RecordRejection(profile, "AnimeOut");
+
+        // Correlation cannot see that a translation reads badly; only the person watching can, and
+        // throwing the file away is how they say so.
+        Assert.Equal(3, profile.Confirmations);
+        Assert.Equal("AnimeOut", profile.PreferredReleaseGroup);
+    }
+
+    [Fact]
+    public void OneBadEpisodeDoesNotUndoASeasonOfAgreement()
+    {
+        var profile = new SeriesProfile();
+        for (var i = 0; i < 6; i++)
+        {
+            SeriesProfileStore.RecordSuccess(profile, "AnimeOut", 100);
+        }
+
+        SeriesProfileStore.RecordRejection(profile, "AnimeOut");
+
+        Assert.True(SeriesProfileStore.IsPreferred(profile, "AnimeOut", 100, MinConfirmations));
+    }
+
+    [Fact]
+    public void RepeatedRejectionsClearThePreferenceEntirely()
+    {
+        var profile = new SeriesProfile();
+        SeriesProfileStore.RecordSuccess(profile, "AnimeOut", 100);
+        SeriesProfileStore.RecordSuccess(profile, "AnimeOut", 100);
+
+        SeriesProfileStore.RecordRejection(profile, "AnimeOut");
+        SeriesProfileStore.RecordRejection(profile, "AnimeOut");
+
+        Assert.Equal(string.Empty, profile.PreferredReleaseGroup);
+        Assert.Equal(0, profile.PreferredEntryId);
+        Assert.False(SeriesProfileStore.IsPreferred(profile, "AnimeOut", 100, MinConfirmations));
+    }
+
+    [Fact]
+    public void RejectingSomeOtherGroupLeavesThePreferenceAlone()
+    {
+        var profile = new SeriesProfile();
+        for (var i = 0; i < 3; i++)
+        {
+            SeriesProfileStore.RecordSuccess(profile, "AnimeOut", 100);
+        }
+
+        SeriesProfileStore.RecordRejection(profile, "Erai-raws");
+
+        Assert.Equal(3, profile.Confirmations);
+    }
+
+    [Fact]
     public async Task EntriesCache_RespectsTheLookupFingerprintAndTheTtl()
     {
         var directory = Path.Combine(Path.GetTempPath(), "jimaku-series-" + Guid.NewGuid().ToString("N"));
