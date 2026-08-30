@@ -324,6 +324,17 @@
           </div>
 
           <label class="checkboxContainer">
+            <input is="emby-checkbox" type="checkbox" id="NativePickerAppliesUnverified" />
+            <span>Always write a subtitle picked in a client's own subtitle dialog</span>
+          </label>
+          <div class="fieldDescription">
+            That dialog cannot explain a refusal &mdash; the download just fails, with no reason and
+            no way to override. Picking a file there is an explicit choice, so it is written, with
+            the measured correction applied when one was found. Turn this off to have it verified
+            like everything else, and fail silently when it does not pass.
+          </div>
+
+          <label class="checkboxContainer">
             <input is="emby-checkbox" type="checkbox" id="PreferMatchingSource" />
             <span>Prefer subtitles released against the same source as the file</span>
           </label>

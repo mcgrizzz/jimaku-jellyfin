@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.28.0",
+                "changelog": "- Fix drift correction failing to fire on the comparison it is most often needed for. The\n  refinement was checked with a score computed differently from the one it had to beat, so it\n  quietly declined; and it inherited the uncorrected fit's uniqueness, meaning a drift could be\n  measured correctly and then rejected for the vagueness the correction had just removed. It also\n  now measures repeatedly until it converges - one pass left half a second across an episode,\n  which is the whole matching tolerance.\n- Always write a subtitle picked in a client's own subtitle dialog. That dialog cannot explain a\n  refusal: the download just fails, with no reason and no way to override. The measured\n  correction is applied when one was found.\n- Treat 1920x1080 and 1080p as the same resolution. Release names use both, and the disc-sourced\n  candidate was losing a match it had earned to a stream rip that spelled it the other way.\n- Stop recording a trailing [sdh] or [cc] as a release group. It sits where a group tag sits and\n  parses as one, and the series preference would have learned that a show is best served by the\n  group \"sdh\".",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.28.0.zip",
+                "checksum": "4d3517e1ffa2dc59035afe3905e29151",
+                "timestamp": "2026-08-30T15:49:33Z"
+            },
+            {
                 "version": "1.0.27.0",
                 "changelog": "- Require a subtitle to actually name the same source before preferring it, rather than merely\n  not naming a different one. A filename saying nothing about its origin produced the same \"not\n  mismatched\" as one naming the right origin, so an untagged fansub was promoted over the disc\n  release it was competing with, on a disc video.\n- Stop fabricating cue lengths when an image-based track reports none. Every cue was stretched to\n  meet the next, turning the reference into one continuous block - and a reference that is on\n  almost all the time correlates about equally well with everything, so every candidate scored\n  alike and the choice between them came down to noise.\n- Report the reference's own shape: how many cues, how long they run, and how much of the episode\n  it covers. A reference that looks fine and is useless is otherwise indistinguishable from a\n  library full of bad subtitles.",
                 "targetAbi": "10.11.0.0",

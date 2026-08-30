@@ -23,6 +23,55 @@ public sealed class ReleaseInfo
     ];
 
     /// <summary>
+    /// Bracketed tokens anitomy reports as a release group when they are nothing of the kind.
+    /// </summary>
+    /// <remarks>
+    /// A trailing <c>[sdh]</c> or <c>[cc]</c> occupies the same position in a filename as a group
+    /// tag and is parsed as one. Harmless for scoring, since it simply fails to match - but the
+    /// series preference learns from release groups, and would have recorded that a show is best
+    /// served by the group "sdh".
+    /// </remarks>
+    private static readonly HashSet<string> NotReleaseGroups =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "sdh", "cc", "forced", "full", "dialogue", "signs", "songs", "hi", "sub", "subs",
+        };
+
+    /// <summary>
+    /// Reduces a resolution to its shorthand, so that the two ways of writing the same frame size
+    /// compare equal.
+    /// </summary>
+    /// <remarks>
+    /// Release names are split about evenly between <c>1080p</c> and <c>1920x1080</c>, and treating
+    /// them as different costs a subtitle the resolution match it has earned. The disc-sourced
+    /// candidate for one episode scored lower than a stream rip for exactly this reason.
+    /// </remarks>
+    /// <param name="resolution">The raw resolution token.</param>
+    /// <returns>The shorthand form, or the original when it is not a frame size.</returns>
+    public static string? NormalizeResolution(string? resolution)
+    {
+        if (string.IsNullOrWhiteSpace(resolution))
+        {
+            return null;
+        }
+
+        var text = resolution.Trim().ToLowerInvariant();
+        var separator = text.IndexOfAny(['x', '\u00d7']);
+
+        if (separator > 0
+            && int.TryParse(
+                text[(separator + 1)..],
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var height))
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"{height}p");
+        }
+
+        return text;
+    }
+
+    /// <summary>
     /// Reduces a source token to its family, so that superficially different spellings of the same
     /// origin are treated as the same origin.
     /// </summary>
@@ -64,6 +113,12 @@ public sealed class ReleaseInfo
 
     /// <summary>Gets the video resolution token, e.g. <c>1080p</c>.</summary>
     public string? Resolution { get; init; }
+
+    /// <summary>
+    /// Gets the resolution reduced to its shorthand, so <c>1920x1080</c> and <c>1080p</c> compare
+    /// equal rather than reading as two different sizes.
+    /// </summary>
+    public string? ResolutionFamily => NormalizeResolution(Resolution);
 
     /// <summary>
     /// Gets the source token: <c>BD</c>, <c>WEB</c>, <c>TV</c> and so on. This is the single most
@@ -135,10 +190,18 @@ public sealed class ReleaseInfo
             }
         }
 
+        // A trailing accessibility tag sits where a group tag sits and is parsed as one. Dropping
+        // it keeps it out of the series preference, which learns from release groups.
+        var group = Find(Element.ElementCategory.ElementReleaseGroup);
+        if (group is not null && NotReleaseGroups.Contains(group.Trim()))
+        {
+            group = null;
+        }
+
         return new ReleaseInfo
         {
             Title = Find(Element.ElementCategory.ElementAnimeTitle),
-            ReleaseGroup = Find(Element.ElementCategory.ElementReleaseGroup),
+            ReleaseGroup = group,
             EpisodeNumber = episode,
             Resolution = Find(Element.ElementCategory.ElementVideoResolution),
             Source = source,

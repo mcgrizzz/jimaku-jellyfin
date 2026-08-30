@@ -139,6 +139,68 @@ public class DriftRefinerTests(ITestOutputHelper output)
         Assert.True(refined is null || Math.Abs(refined.Value.Scale - 1.0) <= 0.05);
     }
 
+    [Fact]
+    public void DriftIsRecoveredWhenMatchingOnCueStartsToo()
+    {
+        // The path that reached the user, and the one that was never exercised. Cue starts build a
+        // far sparser signal than cue spans, and the refinement has to be checked by the same
+        // machinery that produced the fit it is trying to beat - otherwise the two correlations are
+        // not comparable and it quietly declines to fire.
+        var (signal, reference, candidate) = Drifting(1.85, 6.7);
+
+        var onsetReference = ActivitySignal.FromCueStarts(reference, EpisodeSeconds);
+        var search = new LinearFitSearch(new LinearFitOptions());
+        var coarse = search.Search(onsetReference, candidate, null, onsets: true)[0];
+
+        var refined = DriftRefiner.Refine(onsetReference, candidate, coarse, onsets: true);
+
+        Assert.NotNull(refined);
+        output.WriteLine(
+            $"onsets: x{coarse.Scale:0.######} r={coarse.Correlation:0.00} -> x{refined.Value.Scale:0.######} r={refined.Value.Correlation:0.00}");
+
+        // Cue starts give a far sparser signal than cue spans, so the recovered rate is coarser.
+        // Asserting it to six figures would be pinning noise; what has to hold is that the drift it
+        // removes is the drift that was there, to within a fraction of a second across the episode.
+        var recoveredDrift = (refined.Value.Scale - 1.0) * EpisodeSeconds;
+        Assert.InRange(recoveredDrift, 6.7 - 1.85 - 1.0, 6.7 - 1.85 + 1.0);
+
+        var after = CueCoverage.Measure(reference, candidate, refined.Value.Transform, EpisodeSeconds);
+        Assert.True(after.ReferenceCovered > 0.95, $"covered {after.ReferenceCovered:P0}");
+    }
+
+    [Fact]
+    public void TheWholeAlignerRecoversDriftEndToEnd()
+    {
+        // Through Align rather than the refiner directly, so the wiring is covered as well as the
+        // arithmetic: the aligner has to hand the refinement the same signal the winning
+        // hypothesis was measured against.
+        var (_, reference, candidate) = Drifting(1.85, 6.7);
+
+        var document = SubtitleDocument.Parse(System.Text.Encoding.UTF8.GetBytes(
+            string.Join(Environment.NewLine, candidate.Cues.Select((c, i) => string.Join(
+                Environment.NewLine,
+                (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Stamp(c.StartSeconds) + " --> " + Stamp(c.EndSeconds),
+                "line " + (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                string.Empty)))));
+
+        var track = new Jellyfin.Plugin.Jimaku.Media.ReferenceTrack(
+            ActivitySignal.FromCues(reference, EpisodeSeconds), "test", reference);
+
+        var result = new Jellyfin.Plugin.Jimaku.Sync.SubtitleAligner(
+            new Jellyfin.Plugin.Jimaku.Configuration.PluginConfiguration())
+            .Align(track, document, allowPiecewise: false, expectDifferentCut: false);
+
+        output.WriteLine($"{result.Verdict}: {result.Reason}");
+
+        Assert.Equal(SyncVerdict.FramerateDrift, result.Verdict);
+        Assert.True(result.Coverage > 0.95, $"covered {result.Coverage:P0}");
+    }
+
+    private static string Stamp(double seconds) =>
+        TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"hh\:mm\:ss\,fff");
+
+
     [Theory]
     [InlineData(1.0, 3.5)]
     [InlineData(-2.0, 2.0)]

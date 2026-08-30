@@ -127,6 +127,13 @@ public class JimakuSubtitleProvider(
                 // Someone tapped download in a client and is now looking at a dialog that will
                 // tell them nothing. This is what lets the plugin speak for itself afterwards.
                 Interactive = true,
+
+                // A refusal here cannot be explained. The dialog reports a failed download with no
+                // reason, no numbers and no way to override, so declining is strictly less useful
+                // than writing the file the user named - with the measured correction if one was
+                // found. The plugin's own page remains the strict path.
+                ApplyEvenIfUnverified = Plugin.Instance?.Configuration.NativePickerAppliesUnverified ?? true,
+                UseMeasuredTransform = true,
             },
             cancellationToken).ConfigureAwait(false);
 

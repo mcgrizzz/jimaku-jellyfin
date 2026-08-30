@@ -6,7 +6,8 @@ const FIELDS = {
         'EnableFramerateCorrection', 'AllowPiecewiseOnDemand', 'AllowPiecewiseScheduled',
         'EnableAudioFallback', 'DetectReferenceBias',
         'ShowClientNotifications', 'WriteActivityLog', 'UseSeriesPreference',
-        'RemoveSupersededSidecars', 'StampProvenance', 'PreferMatchingSource'
+        'RemoveSupersededSidecars', 'StampProvenance', 'PreferMatchingSource',
+        'NativePickerAppliesUnverified'
     ],
     number: [
         'MinCorrelation', 'MinOnsetCorrelation', 'MinPeakRatio', 'MaxOffsetSeconds', 'MaxCandidatesToTry',

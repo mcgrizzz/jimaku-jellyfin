@@ -99,7 +99,7 @@ public static class ReleaseMatcher
             }
         }
 
-        if (TokensEqual(video.Resolution, subtitle.Resolution))
+        if (TokensEqual(video.ResolutionFamily, subtitle.ResolutionFamily))
         {
             score += 10;
         }

@@ -40,6 +40,18 @@ public static class DriftRefiner
     private const int MinimumSegmentCues = 8;
 
     /// <summary>
+    /// How many times to measure and correct before settling.
+    /// </summary>
+    /// <remarks>
+    /// One pass leaves a residue. Each end's offset is found by correlating a third of the cues,
+    /// which locates a peak to within a bin or two - and a slope drawn through two points that are
+    /// each slightly wrong is itself slightly wrong, by enough at the far end of an episode to push
+    /// cues outside the half-second that counts as a match. Correcting again against what remains
+    /// converges quickly, because each pass starts from a much smaller error than the last.
+    /// </remarks>
+    private const int MaxPasses = 4;
+
+    /// <summary>
     /// Measures the rate difference between a subtitle and a reference, and returns the improved fit.
     /// </summary>
     /// <param name="reference">The reference signal.</param>
@@ -54,6 +66,34 @@ public static class DriftRefiner
         LinearFit coarse,
         bool onsets,
         double searchSeconds = LocalSearchSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        ArgumentNullException.ThrowIfNull(probe);
+
+        LinearFit? best = null;
+        var current = coarse;
+
+        for (var pass = 0; pass < MaxPasses; pass++)
+        {
+            var next = RefineOnce(reference, probe, current, onsets, searchSeconds);
+            if (next is not { } improved || improved.Correlation <= current.Correlation)
+            {
+                break;
+            }
+
+            best = improved;
+            current = improved;
+        }
+
+        return best;
+    }
+
+    private static LinearFit? RefineOnce(
+        ActivitySignal reference,
+        CueTrack probe,
+        LinearFit coarse,
+        bool onsets,
+        double searchSeconds)
     {
         ArgumentNullException.ThrowIfNull(reference);
         ArgumentNullException.ThrowIfNull(probe);
@@ -113,16 +153,28 @@ public static class DriftRefiner
         var offset = (coarse.OffsetSeconds * extraScale) + extraOffset;
         var refined = new TimingTransform(scale, offset);
 
-        var correlation = Score(reference, probe, refined, onsets);
-        if (correlation <= coarse.Correlation)
+        // Verified by re-running the same search on the corrected cues, rather than by scoring the
+        // transform by hand. The search clips long cues, pads to its own length and normalises
+        // against it; a score computed differently is not comparable to the one it produced, and
+        // comparing them anyway is how this refinement silently declined to fire on a real drift.
+        var check = search.Search(
+            reference,
+            new CueTrack(probe.Cues.Select(c => new Cue(refined.Apply(c.StartSeconds), refined.Apply(c.EndSeconds))).ToList()),
+            [1.0],
+            onsets);
+
+        if (check.Count == 0 || check[0].Correlation <= coarse.Correlation)
         {
             return null;
         }
 
-        // Uniqueness is carried over: the coarse peak established which alignment this is, and the
-        // refinement only sharpens it. Re-deriving it from a one-point evaluation would be
-        // meaningless, and claiming a better one would be worse than meaningless.
-        return new LinearFit(scale, offset, correlation, coarse.PeakRatio);
+        // Uniqueness is taken from the verification, not carried over from the coarse fit. A
+        // drifting subtitle has no single offset that works, so its uncorrected peak is necessarily
+        // indistinct - and inheriting that number meant a drift could be measured correctly and
+        // then declined for the vagueness the correction had just removed. The verification
+        // measures how unique the alignment is once the drift is gone, which is the question that
+        // was being asked.
+        return new LinearFit(scale, offset, check[0].Correlation, check[0].PeakRatio);
     }
 
     /// <summary>
@@ -154,41 +206,5 @@ public static class DriftRefiner
         return (fits[0].OffsetSeconds, slice.Average(c => c.StartSeconds));
     }
 
-    /// <summary>Scores one transform against the reference, with no search.</summary>
-    private static double Score(
-        ActivitySignal reference,
-        CueTrack probe,
-        TimingTransform transform,
-        bool onsets)
-    {
-        var shifted = new CueTrack(probe.Cues
-            .Select(c => new Cue(transform.Apply(c.StartSeconds), transform.Apply(c.EndSeconds)))
-            .ToList());
-
-        var duration = reference.DurationSeconds;
-        var signal = onsets
-            ? ActivitySignal.FromCueStarts(shifted, duration)
-            : ActivitySignal.FromCues(shifted, duration);
-
-        var length = Math.Min(reference.Length, signal.Length);
-        if (length == 0)
-        {
-            return 0;
-        }
-
-        var overlap = 0.0;
-        var activeA = 0.0;
-        var activeB = 0.0;
-
-        for (var i = 0; i < length; i++)
-        {
-            var a = reference.Bins[i];
-            var b = signal.Bins[i];
-            overlap += a * b;
-            activeA += a;
-            activeB += b;
-        }
-
-        return CorrelationScore.Compute(overlap, activeA, activeB, length);
-    }
 }
+

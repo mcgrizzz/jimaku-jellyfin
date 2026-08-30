@@ -253,6 +253,19 @@ public class PluginConfiguration : BasePluginConfiguration
     public bool PreferMatchingSource { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets a value indicating whether a subtitle picked in a client's own subtitle dialog
+    /// is written even when its timing cannot be verified.
+    /// </summary>
+    /// <remarks>
+    /// That dialog offers no way to explain a refusal: the download simply fails, with no reason
+    /// and no alternative. Refusing there is therefore worse than refusing on the plugin's own
+    /// page, where the numbers and a manual shift are both to hand. Picking a file by name is an
+    /// explicit choice, so it is written - with the measured correction when one was found, which
+    /// is more useful than writing it untouched.
+    /// </remarks>
+    public bool NativePickerAppliesUnverified { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets how much measured quality the source preference may override.
     /// </summary>
     public double SourcePreferenceTolerance { get; set; } = 0.05;

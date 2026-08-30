@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 28
+version: 29
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,14 +16,17 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Require a subtitle to actually name the same source before preferring it, rather than merely
-    not naming a different one. A filename saying nothing about its origin produced the same "not
-    mismatched" as one naming the right origin, so an untagged fansub was promoted over the disc
-    release it was competing with, on a disc video.
-  - Stop fabricating cue lengths when an image-based track reports none. Every cue was stretched to
-    meet the next, turning the reference into one continuous block - and a reference that is on
-    almost all the time correlates about equally well with everything, so every candidate scored
-    alike and the choice between them came down to noise.
-  - Report the reference's own shape: how many cues, how long they run, and how much of the episode
-    it covers. A reference that looks fine and is useless is otherwise indistinguishable from a
-    library full of bad subtitles.
+  - Fix drift correction failing to fire on the comparison it is most often needed for. The
+    refinement was checked with a score computed differently from the one it had to beat, so it
+    quietly declined; and it inherited the uncorrected fit's uniqueness, meaning a drift could be
+    measured correctly and then rejected for the vagueness the correction had just removed. It also
+    now measures repeatedly until it converges - one pass left half a second across an episode,
+    which is the whole matching tolerance.
+  - Always write a subtitle picked in a client's own subtitle dialog. That dialog cannot explain a
+    refusal: the download just fails, with no reason and no way to override. The measured
+    correction is applied when one was found.
+  - Treat 1920x1080 and 1080p as the same resolution. Release names use both, and the disc-sourced
+    candidate was losing a match it had earned to a stream rip that spelled it the other way.
+  - Stop recording a trailing [sdh] or [cc] as a release group. It sits where a group tag sits and
+    parses as one, and the series preference would have learned that a show is best served by the
+    group "sdh".
