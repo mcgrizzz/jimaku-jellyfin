@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.31.0",
+                "changelog": "- Correct a drifting subtitle by hand. Give the shift needed at the start of the episode and the\n  shift needed at the end, and it is stretched through both rather than moved by one of them.\n  A subtitle needing different corrections early and late is running at a different rate, which\n  no single shift fixes; this is what remains when nothing in the file supports measuring it.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.31.0.zip",
+                "checksum": "f3264acb239de7228cd7b37eda5c26a6",
+                "timestamp": "2026-08-30T19:17:38Z"
+            },
+            {
                 "version": "1.0.30.0",
                 "changelog": "- Read every image-based subtitle track in one pass, keyed on the index ffprobe itself reports.\n  Asking for one stream at a time meant trusting that the index the library reports is the index\n  ffprobe uses; on one file that returned 318 cues for a track titled \"Signs\" and nothing at all\n  for the one titled \"Dialogue\".\n- Judge a track by what it contains rather than by what it is called. Track titles are frequently\n  wrong, and a warning based on the title alone cast doubt on the only usable track in the file.\n  A signs track carries a few dozen cues; a dialogue track carries hundreds.",
                 "targetAbi": "10.11.0.0",

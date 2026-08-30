@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 31
+version: 32
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,10 +16,7 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Read every image-based subtitle track in one pass, keyed on the index ffprobe itself reports.
-    Asking for one stream at a time meant trusting that the index the library reports is the index
-    ffprobe uses; on one file that returned 318 cues for a track titled "Signs" and nothing at all
-    for the one titled "Dialogue".
-  - Judge a track by what it contains rather than by what it is called. Track titles are frequently
-    wrong, and a warning based on the title alone cast doubt on the only usable track in the file.
-    A signs track carries a few dozen cues; a dialogue track carries hundreds.
+  - Correct a drifting subtitle by hand. Give the shift needed at the start of the episode and the
+    shift needed at the end, and it is stretched through both rather than moved by one of them.
+    A subtitle needing different corrections early and late is running at a different rate, which
+    no single shift fixes; this is what remains when nothing in the file supports measuring it.

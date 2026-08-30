@@ -176,6 +176,17 @@ public sealed class SyncOptions
     public double? ManualOffsetSeconds { get; set; }
 
     /// <summary>
+    /// Gets or sets the shift needed at the end of the episode, when it differs from the start.
+    /// </summary>
+    /// <remarks>
+    /// A subtitle that needs one correction early and a larger one late is running at a slightly
+    /// different rate, and no single shift can fix it. Given both ends, the line through them is
+    /// determined - which is the same arithmetic the automatic drift correction does, from
+    /// measurements a person can make by watching when nothing in the file supports measuring them.
+    /// </remarks>
+    public double? ManualEndOffsetSeconds { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether to write the sidecar and refresh the item.
     /// </summary>
     /// <remarks>

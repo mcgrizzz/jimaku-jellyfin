@@ -272,11 +272,16 @@ function renderCandidates(view, candidates, itemId) {
                      <span>Use with ${escapeHtml(measured)}</span></button>`;
             }
 
+            // Two figures, because a subtitle needing a different correction early and late is
+            // running at a different rate and no single shift fixes it. Leave the second blank for
+            // a plain shift.
             action += `<div style="margin-top:0.3em;white-space:nowrap;">
                  <input is="emby-input" type="number" step="0.05" class="jimaku-offset"
-                        placeholder="shift s" style="width:6em;" />
+                        placeholder="start s" style="width:5.5em;" />
+                 <input is="emby-input" type="number" step="0.05" class="jimaku-offset-end"
+                        placeholder="end s" style="width:5.5em;" />
                  <button is="emby-button" type="button" class="raised jimaku-apply-offset" ${attrs}
-                        title="Write it shifted by exactly this many seconds, without verification">
+                        title="Write it shifted by this many seconds. Give both and it is stretched between them instead.">
                      <span>Shift</span></button></div>`;
         } else {
             action = escapeHtml(c.RejectedBecause || '');
@@ -603,7 +608,7 @@ function listCandidates(view, itemId) {
     }).catch(err => showError(view, err));
 }
 
-function applyCandidate(view, button, manualOffset) {
+function applyCandidate(view, button, manualOffset, manualEnd) {
     const status = view.querySelector('#ActionStatus');
     status.textContent = 'Downloading and verifying…';
 
@@ -616,7 +621,8 @@ function applyCandidate(view, button, manualOffset) {
             Url: button.dataset.url,
             ApplyEvenIfUnverified: button.dataset.force === '1' || manualOffset != null,
             UseMeasuredTransform: button.dataset.measured === '1',
-            ManualOffsetSeconds: manualOffset
+            ManualOffsetSeconds: manualOffset,
+            ManualEndOffsetSeconds: manualEnd
         }),
         contentType: 'application/json',
         dataType: 'json'
@@ -739,14 +745,21 @@ export default function (view) {
         const shift = e.target.closest('.jimaku-apply-offset');
         if (shift) {
             const field = shift.parentElement.querySelector('.jimaku-offset');
+            const endField = shift.parentElement.querySelector('.jimaku-offset-end');
             const value = Number(field && field.value);
+
             if (!field || field.value === '' || Number.isNaN(value)) {
                 view.querySelector('#ActionStatus').textContent =
-                    'Enter a shift in seconds first — negative moves the subtitle earlier.';
+                    'Enter the shift needed at the start — negative moves the subtitle earlier. '
+                    + 'Add the shift needed at the end too if it drifts.';
                 return;
             }
 
-            applyCandidate(view, shift, value);
+            const end = endField && endField.value !== '' && !Number.isNaN(Number(endField.value))
+                ? Number(endField.value)
+                : null;
+
+            applyCandidate(view, shift, value, end);
             return;
         }
 

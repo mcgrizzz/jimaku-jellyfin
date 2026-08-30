@@ -162,6 +162,7 @@ public class JimakuController(
                 ApplyEvenIfUnverified = body.ApplyEvenIfUnverified,
                 UseMeasuredTransform = body.UseMeasuredTransform,
                 ManualOffsetSeconds = body.ManualOffsetSeconds,
+                ManualEndOffsetSeconds = body.ManualEndOffsetSeconds,
                 Interactive = true,
             },
             cancellationToken).ConfigureAwait(false);

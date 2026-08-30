@@ -146,6 +146,12 @@ public class ApplyRequest
 
     /// <summary>Gets or sets an exact shift to apply, in seconds, bypassing measurement entirely.</summary>
     public double? ManualOffsetSeconds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the shift needed at the end of the episode, when it differs from the start.
+    /// Given both, the subtitle is stretched rather than moved.
+    /// </summary>
+    public double? ManualEndOffsetSeconds { get; set; }
 }
 
 /// <summary>

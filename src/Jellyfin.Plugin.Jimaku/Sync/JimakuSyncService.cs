@@ -576,15 +576,7 @@ public sealed class JimakuSyncService(
         // when there is no usable reference at all - which is exactly when it gets used.
         if (options.ManualOffsetSeconds is { } manual)
         {
-            return new AlignmentResult
-            {
-                Verdict = Math.Abs(manual) < 1e-9 ? SyncVerdict.Exact : SyncVerdict.ConstantOffset,
-                Transform = new TimingTransform(1.0, manual),
-                ReferenceSource = "an offset you supplied",
-                Reason = string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Shifted by {manual:+0.000;-0.000}s as you specified, without verification."),
-            };
+            return ManualAlignment(document, manual, options.ManualEndOffsetSeconds);
         }
 
         // A shared CRC32 means the subtitle was released against this exact video file, so its
@@ -643,6 +635,54 @@ public sealed class JimakuSyncService(
         }
 
         return alignment;
+    }
+
+    /// <summary>
+    /// Builds the correction a person specified, from one end of the episode or from both.
+    /// </summary>
+    /// <remarks>
+    /// Two figures rather than one because a subtitle that needs a different correction early and
+    /// late is running at a different rate, and no shift fixes that. Given the shift at each end,
+    /// the line through them is determined. This path takes no reference at all, which is the point:
+    /// it is what remains when nothing in the file supports measuring, and someone watching can see
+    /// perfectly well what the file cannot show.
+    /// </remarks>
+    private static AlignmentResult ManualAlignment(SubtitleDocument document, double atStart, double? atEnd)
+    {
+        var cues = document.ToCueTrack();
+
+        if (atEnd is { } end && cues.Count >= 2)
+        {
+            var first = cues.FirstStartSeconds;
+            var last = cues.Cues[^1].StartSeconds;
+            var span = last - first;
+
+            if (span > 1 && Math.Abs(end - atStart) > 1e-9)
+            {
+                var scale = 1.0 + ((end - atStart) / span);
+                var offset = atStart - ((scale - 1.0) * first);
+
+                return new AlignmentResult
+                {
+                    Verdict = SyncVerdict.FramerateDrift,
+                    Transform = new TimingTransform(scale, offset),
+                    ReferenceSource = "corrections you supplied",
+                    Reason = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Stretched to your figures: {atStart:+0.000;-0.000}s at the start growing to {end:+0.000;-0.000}s at the end, a rate difference of {(scale - 1.0) * 100:0.000}%."),
+                };
+            }
+        }
+
+        return new AlignmentResult
+        {
+            Verdict = Math.Abs(atStart) < 1e-9 ? SyncVerdict.Exact : SyncVerdict.ConstantOffset,
+            Transform = new TimingTransform(1.0, atStart),
+            ReferenceSource = "an offset you supplied",
+            Reason = string.Create(
+                CultureInfo.InvariantCulture,
+                $"Shifted by {atStart:+0.000;-0.000}s as you specified, without verification."),
+        };
     }
 
     private async Task<SyncResult> ApplyAsync(
