@@ -357,6 +357,15 @@ public class ReferenceReportDto
     /// <summary>Gets or sets the voice activity detector used, when one was.</summary>
     public string Detector { get; set; } = string.Empty;
 
+    /// <summary>Gets or sets how many cues the chosen reference carries.</summary>
+    public int Cues { get; set; }
+
+    /// <summary>Gets or sets the median cue length of the chosen reference, in seconds.</summary>
+    public double MedianCueSeconds { get; set; }
+
+    /// <summary>Gets or sets the share of the episode the reference has something on screen.</summary>
+    public double DutyCycle { get; set; }
+
     /// <summary>Gets or sets every subtitle stream that was considered.</summary>
     public IReadOnlyList<ReferenceStreamDto> Streams { get; set; } = Array.Empty<ReferenceStreamDto>();
 }

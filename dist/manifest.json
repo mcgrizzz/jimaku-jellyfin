@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.27.0",
+                "changelog": "- Require a subtitle to actually name the same source before preferring it, rather than merely\n  not naming a different one. A filename saying nothing about its origin produced the same \"not\n  mismatched\" as one naming the right origin, so an untagged fansub was promoted over the disc\n  release it was competing with, on a disc video.\n- Stop fabricating cue lengths when an image-based track reports none. Every cue was stretched to\n  meet the next, turning the reference into one continuous block - and a reference that is on\n  almost all the time correlates about equally well with everything, so every candidate scored\n  alike and the choice between them came down to noise.\n- Report the reference's own shape: how many cues, how long they run, and how much of the episode\n  it covers. A reference that looks fine and is useless is otherwise indistinguishable from a\n  library full of bad subtitles.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.27.0.zip",
+                "checksum": "37b5c9da91949bc2f6758aee655f9826",
+                "timestamp": "2026-08-30T15:36:00Z"
+            },
+            {
                 "version": "1.0.26.0",
                 "changelog": "- Stop the differing-cut aligner rescuing subtitles that do not match at all. It gets a free\n  offset per section, so it raises correlation almost by construction - and correlation was the\n  only thing refereeing it. A subtitle whose single-offset fit was completely non-unique, the\n  signature of the wrong file, came back as a confident two-section match. A split must now also\n  put most of the dialogue in the right place, which extra freedom alone cannot achieve.\n- Never attempt a differing-cut match against voice activity. It has no cue structure, so there\n  is nothing to check the result against: maximum freedom on the weakest evidence.\n- Say when a split was rejected for fitting noise, and how little of the dialogue it landed on.",
                 "targetAbi": "10.11.0.0",

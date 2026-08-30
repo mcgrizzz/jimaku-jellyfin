@@ -276,6 +276,9 @@ public class JimakuController(
             Note = report.Explain() is { Length: > 0 } explanation ? explanation : report.Note,
             AudioTrack = report.AudioTrack,
             Detector = report.Detector,
+            Cues = report.Cues,
+            MedianCueSeconds = report.MedianCueSeconds,
+            DutyCycle = report.DutyCycle,
             Streams = report.Streams.Select(s => new ReferenceStreamDto
             {
                 Index = s.Index,

@@ -39,6 +39,22 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
     /// <summary>Longest a cue may run when its end has to be inferred from the next one.</summary>
     private const double MaxInferredDurationSeconds = 10.0;
 
+    /// <summary>
+    /// Duration assumed when the container reports none at all, in seconds.
+    /// </summary>
+    /// <remarks>
+    /// Extending every cue to the start of the next one is only sound when the missing durations
+    /// are occasional. When none are present it is disastrous: dialogue cues sit a few seconds
+    /// apart, so every cue stretches to meet its neighbour and the track becomes one continuous
+    /// block. That signal is on almost all the time, and a signal that is always on carries no
+    /// timing information at all - every alignment correlates about equally well with it. A typical
+    /// subtitle duration keeps the gaps, which is where the information lives.
+    /// </remarks>
+    private const double NominalDurationSeconds = 2.0;
+
+    /// <summary>Fraction of packets that must carry a duration before durations are trusted.</summary>
+    private const double DurationCoverageThreshold = 0.5;
+
     /// <summary>Shorter than this and it is a flicker, not a subtitle.</summary>
     private const double MinimumDurationSeconds = 0.05;
 
@@ -95,6 +111,10 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
             starts.Add((pts, duration));
         }
 
+        var withDuration = starts.Count(s => s.Duration > 0);
+        var trustDurations = starts.Count > 0
+            && (double)withDuration / starts.Count >= DurationCoverageThreshold;
+
         var cues = new List<Cue>(starts.Count);
 
         for (var i = 0; i < starts.Count; i++)
@@ -103,11 +123,14 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
 
             if (duration <= 0)
             {
-                // No block duration, so the cue runs until the next one appears. Capped, because a
-                // final cue with nothing after it would otherwise stretch to the end of the file.
-                duration = i + 1 < starts.Count
-                    ? Math.Min(starts[i + 1].Start - start, MaxInferredDurationSeconds)
-                    : 2.0;
+                var toNext = i + 1 < starts.Count ? starts[i + 1].Start - start : NominalDurationSeconds;
+
+                duration = trustDurations
+                    // Occasional gaps in otherwise good data: the cue runs until the next appears.
+                    ? Math.Min(toNext, MaxInferredDurationSeconds)
+                    // No durations anywhere. Assume a normal one rather than joining every cue to
+                    // its neighbour, which would erase the gaps the alignment depends on.
+                    : Math.Min(toNext, NominalDurationSeconds);
             }
 
             if (duration >= MinimumDurationSeconds)
@@ -183,12 +206,14 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
 
             var track = Parse(lines);
 
-            logger.LogDebug(
-                "Read {Cues} cue timings from image-based stream {Index} of {Path} ({Packets} packets).",
+            logger.LogInformation(
+                "Read {Cues} cue timings from image-based stream {Index} of {Path} ({Packets} packets, median cue {Median:0.00}s, on screen {Duty:P0}).",
                 track.Count,
                 streamIndex,
                 mediaPath,
-                lines.Count);
+                lines.Count,
+                MedianDuration(track),
+                DutyCycle(track));
 
             return track;
         }
@@ -201,6 +226,46 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
             logger.LogWarning(ex, "Could not read subtitle packet timings from {Path}.", mediaPath);
             return null;
         }
+    }
+
+    /// <summary>Median cue length, which reveals a track whose durations were fabricated.</summary>
+    /// <param name="track">The cues.</param>
+    /// <returns>The median duration in seconds.</returns>
+    public static double MedianDuration(CueTrack track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+
+        if (track.Count == 0)
+        {
+            return 0;
+        }
+
+        var durations = track.Cues.Select(c => c.DurationSeconds).OrderBy(d => d).ToArray();
+        return durations[durations.Length / 2];
+    }
+
+    /// <summary>
+    /// Share of the episode with something on screen. A track approaching 1 is one continuous
+    /// block, and correlates about equally well with everything.
+    /// </summary>
+    /// <param name="track">The cues.</param>
+    /// <returns>The fraction between 0 and 1.</returns>
+    public static double DutyCycle(CueTrack track)
+    {
+        ArgumentNullException.ThrowIfNull(track);
+
+        if (track.Count == 0)
+        {
+            return 0;
+        }
+
+        var span = track.LastEndSeconds - track.FirstStartSeconds;
+        if (span <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(1.0, track.Cues.Sum(c => c.DurationSeconds) / span);
     }
 
     private static bool TryParse(string value, out double result) =>

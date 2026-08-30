@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -201,6 +202,19 @@ public sealed class EmbeddedSubtitleReferenceProvider(
 
         report.Chosen = description;
         report.FromSubtitles = true;
+        report.Cues = bestTrack.Count;
+        report.MedianCueSeconds = SubtitlePacketTimings.MedianDuration(bestTrack);
+        report.DutyCycle = SubtitlePacketTimings.DutyCycle(bestTrack);
+
+        // A reference that is on almost all the time carries no timing information: every offset
+        // correlates about equally well with it, so the candidates all score alike and whichever
+        // wins does so on noise.
+        if (report.DutyCycle > 0.7)
+        {
+            report.Note = string.Create(
+                CultureInfo.InvariantCulture,
+                $"This reference has something on screen {report.DutyCycle:P0} of the time, which is too continuous to align against reliably - every candidate will score much alike.");
+        }
 
         if (IsAnnotation(bestStream))
         {

@@ -55,14 +55,19 @@ public class SubtitlePacketTimingTests
     }
 
     [Fact]
-    public void AMissingDurationIsInferredFromTheNextCue()
+    public void AMissingDurationIsInferredFromTheNextCueWhenTheRestAreKnown()
     {
+        // Bridging to the next cue is only sound when the missing durations are the exception. A
+        // track with no durations at all takes the nominal length instead, so that every cue does
+        // not stretch to meet its neighbour and erase the gaps between them.
         var track = SubtitlePacketTimings.Parse([
+            "1.000000,2.000000,4000",
             "5.000000,N/A,4000",
-            "8.000000,N/A,4000",
+            "8.000000,2.000000,4000",
+            "12.000000,2.000000,4000",
         ]);
 
-        Assert.Equal(8.0, track.Cues[0].EndSeconds, 3);
+        Assert.Equal(8.0, track.Cues[1].EndSeconds, 3);
     }
 
     [Fact]

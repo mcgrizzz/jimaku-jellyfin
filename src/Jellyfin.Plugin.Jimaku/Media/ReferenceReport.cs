@@ -78,6 +78,22 @@ public sealed class ReferenceReport
     /// <summary>Gets or sets every subtitle stream that was considered.</summary>
     public List<ReferenceStreamInfo> Streams { get; set; } = [];
 
+    /// <summary>Gets or sets how many cues the chosen reference carries.</summary>
+    public int Cues { get; set; }
+
+    /// <summary>Gets or sets the median cue length of the chosen reference, in seconds.</summary>
+    public double MedianCueSeconds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the share of the episode the chosen reference has something on screen.
+    /// </summary>
+    /// <remarks>
+    /// The number that reveals a reference which looks fine and is useless. A track approaching 1
+    /// is one continuous block, and a signal that is always on correlates about equally well with
+    /// everything - so every candidate scores alike and the choice between them is made on noise.
+    /// </remarks>
+    public double DutyCycle { get; set; }
+
     /// <summary>
     /// Summarizes the reference in one sentence, for a decline message.
     /// </summary>

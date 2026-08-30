@@ -456,12 +456,15 @@ public sealed class JimakuSyncService(
         (SubtitleCandidate Candidate, SubtitleDocument Document, string FileName) chosen,
         PluginConfiguration configuration)
     {
-        if (!configuration.PreferMatchingSource || ranked.Count < 2 || !chosen.Candidate.NameMatch.SourceMismatch)
+        if (!configuration.PreferMatchingSource || ranked.Count < 2 || chosen.Candidate.NameMatch.SourceMatch)
         {
             return chosen;
         }
 
-        var index = ranked.FindIndex(m => !m.Candidate.NameMatch.SourceMismatch);
+        // A positive match, not merely the absence of a mismatch. A filename naming no source at
+        // all produces the same "not mismatched" as one naming the right one, and treating the two
+        // alike promoted an untagged fansub over the actual disc release it was competing with.
+        var index = ranked.FindIndex(m => m.Candidate.NameMatch.SourceMatch);
         if (index < 0)
         {
             return chosen;

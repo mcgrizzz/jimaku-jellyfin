@@ -496,6 +496,12 @@ function renderReference(view, report) {
         + (report.FromSubtitles ? '' : ' <span style="opacity:0.75;">(weaker than an embedded subtitle track)</span>')
         + '</div>';
 
+    if (report.Cues) {
+        html += `<div class="fieldDescription" style="margin-bottom:0.5em;">`
+             + `${report.Cues} cues &middot; median ${Number(report.MedianCueSeconds).toFixed(2)}s `
+             + `&middot; on screen ${(report.DutyCycle * 100).toFixed(0)}% of the episode</div>`;
+    }
+
     if (report.Note) {
         html += `<div class="fieldDescription" style="margin-bottom:0.5em;">${escapeHtml(report.Note)}</div>`;
     }

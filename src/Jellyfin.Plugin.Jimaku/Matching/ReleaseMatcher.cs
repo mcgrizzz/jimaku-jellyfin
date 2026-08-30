@@ -13,12 +13,18 @@ namespace Jellyfin.Plugin.Jimaku.Matching;
 /// The releases came from different sources, such as a broadcast subtitle against a disc video.
 /// A strong hint that the cut differs and that a single global offset will not be enough.
 /// </param>
+/// <param name="SourceMatch">
+/// Both releases name a source and the two agree. Distinct from the absence of a mismatch, which is
+/// also what an unnamed source produces: a filename that says nothing about its origin is not
+/// evidence that the origin is the same one.
+/// </param>
 /// <param name="Notes">A short explanation for display.</param>
 public readonly record struct NameMatch(
     int Score,
     bool IsExactRelease,
     bool EpisodeMismatch,
     bool SourceMismatch,
+    bool SourceMatch,
     string Notes);
 
 /// <summary>
@@ -47,7 +53,7 @@ public static class ReleaseMatcher
         if (!string.IsNullOrEmpty(video.Checksum) &&
             string.Equals(video.Checksum, subtitle.Checksum, StringComparison.OrdinalIgnoreCase))
         {
-            return new NameMatch(100, true, false, false, "exact release match (CRC32)");
+            return new NameMatch(100, true, false, false, true, "exact release match (CRC32)");
         }
 
         var episodeMismatch = expectedEpisode.HasValue &&
@@ -60,6 +66,7 @@ public static class ReleaseMatcher
                 0,
                 false,
                 true,
+                false,
                 false,
                 string.Create(
                     CultureInfo.InvariantCulture,
@@ -76,11 +83,13 @@ public static class ReleaseMatcher
         }
 
         var sourceMismatch = false;
+        var sourceMatch = false;
         if (video.SourceFamily is not null && subtitle.SourceFamily is not null)
         {
             if (TokensEqual(video.SourceFamily, subtitle.SourceFamily))
             {
                 score += 25;
+                sourceMatch = true;
                 notes.Add("same source");
             }
             else
@@ -121,6 +130,7 @@ public static class ReleaseMatcher
             false,
             false,
             sourceMismatch,
+            sourceMatch,
             string.Join(", ", notes));
     }
 
