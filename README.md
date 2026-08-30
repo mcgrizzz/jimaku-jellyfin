@@ -152,6 +152,30 @@ platforms, which is an unreasonable payload for a fallback path. To enable it:
 
 Anything missing or unloadable falls back silently to the built-in detector.
 
+## Troubleshooting
+
+### Subtitles drift during playback but are fine in a local player
+
+This is not the plugin. Jellyfin loses external subtitle sync whenever the video or audio is
+transcoded, and the error grows through the episode — early at the start, seconds late by the end.
+Direct play is unaffected. It is
+[jellyfin/jellyfin#11825](https://github.com/jellyfin/jellyfin/issues/11825), closed as not planned,
+and no setting works around it; "Allow subtitle extraction on the fly" makes no difference.
+
+The check that separates the two: copy the written `.jpn.srt` and the video to a desktop and open
+them in mpv or VLC. In sync there and drifting in Jellyfin means the sidecar is correct and the
+transcode is the problem.
+
+Then look at what forces the transcode, which is usually the audio rather than the video. Lossless
+tracks — LPCM, TrueHD, DTS-HD — are transcoded by most clients even when the video direct plays,
+and audio-only transcoding triggers this just the same. Raising the client's bitrate limit, enabling
+HEVC support in the client, or using a player that direct plays the file (Jellyfin Media Player,
+Swiftfin) all avoid it.
+
+The plugin's own numbers can confirm the sidecar is right before you go looking: "What's it
+comparing to?" lists the reference cue times, and playing the episode with that subtitle track on
+shows whether they match.
+
 ## Prior art and credits
 
 - [`bpwhelan/Emby.Jimaku`](https://github.com/bpwhelan/Emby.Jimaku) — the Emby plugin that

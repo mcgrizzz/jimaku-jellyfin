@@ -398,6 +398,14 @@
           <input is="emby-input" type="text" id="EpisodeSearch" label="Search for a series" />
         </div>
 
+        <p class="fieldDescription">
+          If a subtitle drifts during playback but is in sync when you open the written file in a
+          desktop player, that is Jellyfin losing external subtitle sync while transcoding
+          (<a href="https://github.com/jellyfin/jellyfin/issues/11825" target="_blank" rel="noopener">jellyfin#11825</a>),
+          not a bad match. Direct play is unaffected; lossless audio tracks are the usual reason a
+          file transcodes at all.
+        </p>
+
         <div id="EpisodeResults"></div>
         <div id="ActionStatus" class="fieldDescription" style="margin-top:1em;"></div>
         <div id="HistoryResults" style="margin-top:1em;"></div>

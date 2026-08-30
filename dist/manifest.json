@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.32.0",
+                "changelog": "- Document the drift that is not the plugin's. Jellyfin loses external subtitle sync whenever the\n  video or audio is transcoded, and the error grows through the episode - which looks exactly like\n  a badly matched subtitle. Direct play is unaffected, and lossless audio is the usual reason a\n  file transcodes at all.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.32.0.zip",
+                "checksum": "aae79131abddbc430d083b122bec443d",
+                "timestamp": "2026-08-30T19:24:13Z"
+            },
+            {
                 "version": "1.0.31.0",
                 "changelog": "- Correct a drifting subtitle by hand. Give the shift needed at the start of the episode and the\n  shift needed at the end, and it is stretched through both rather than moved by one of them.\n  A subtitle needing different corrections early and late is running at a different rate, which\n  no single shift fixes; this is what remains when nothing in the file supports measuring it.",
                 "targetAbi": "10.11.0.0",
