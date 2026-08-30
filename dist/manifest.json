@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.30.0",
+                "changelog": "- Read every image-based subtitle track in one pass, keyed on the index ffprobe itself reports.\n  Asking for one stream at a time meant trusting that the index the library reports is the index\n  ffprobe uses; on one file that returned 318 cues for a track titled \"Signs\" and nothing at all\n  for the one titled \"Dialogue\".\n- Judge a track by what it contains rather than by what it is called. Track titles are frequently\n  wrong, and a warning based on the title alone cast doubt on the only usable track in the file.\n  A signs track carries a few dozen cues; a dialogue track carries hundreds.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.30.0.zip",
+                "checksum": "7a4d8222c757b354ae6478a39c80ca20",
+                "timestamp": "2026-08-30T16:23:28Z"
+            },
+            {
                 "version": "1.0.29.0",
                 "changelog": "- Show the reference's own cue times. Every number the plugin reports is measured against that\n  reference, so when it is wrong they all agree with it and none of them can reveal the error.\n  These can be checked against the episode itself: play it with that subtitle track on and see\n  whether the times match.",
                 "targetAbi": "10.11.0.0",

@@ -32,6 +32,12 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     private const int MinimumCues = 10;
 
     /// <summary>
+    /// Below this a track is annotation rather than dialogue, whatever it calls itself. An episode
+    /// of television carries a few hundred lines of speech and a few dozen signs.
+    /// </summary>
+    private const int SparseTrackCues = 120;
+
+    /// <summary>
     /// Cap on tracks compared. The vote is all-pairs, so cost grows with the square: ten tracks is
     /// forty-five cross-correlations, six is fifteen. Six is ample to out-vote an outlier.
     /// </summary>
@@ -80,6 +86,14 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             return null;
         }
 
+        // Read every image-based track's timings in one demux pass, keyed on the index ffprobe
+        // itself reports. Asking for one stream at a time meant trusting that the index the library
+        // reports is the index ffprobe uses, and on a file whose tracks were requested individually
+        // one returned 318 cues and the other nothing at all.
+        var packetTracks = streams.Any(st => !IsUsableText(st))
+            ? await packetTimings.ReadAllAsync(item.Path ?? string.Empty, cancellationToken).ConfigureAwait(false)
+            : new Dictionary<int, CueTrack>();
+
         // Only needed for extraction, and only for the faster of the two routes, so a failure here
         // is no longer fatal.
         MediaSourceInfo? source = null;
@@ -115,7 +129,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             // packet headers - and timings are the only thing wanted here.
             var (parsed, failure) = IsUsableText(candidate)
                 ? await TryReadCuesAsync(candidate, source, item, cancellationToken).ConfigureAwait(false)
-                : await TryReadPacketTimingsAsync(candidate, item, cancellationToken).ConfigureAwait(false);
+                : ResolvePacketTimings(candidate, streams, packetTracks);
 
             if (parsed is null)
             {
@@ -217,12 +231,16 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 $"This reference has something on screen {report.DutyCycle:P0} of the time, which is too continuous to align against reliably - every candidate will score much alike.");
         }
 
-        if (IsAnnotation(bestStream))
+        // Judged on what the track contains, not on what it is called. A signs and songs track
+        // carries a few dozen cues; a dialogue track carries hundreds. On the file that prompted
+        // this the labels were simply wrong - the track titled "Signs" held 318 cues and the one
+        // titled "Dialogue" held none - so a warning based on the title alone was worse than none,
+        // because it cast doubt on the only usable track in the file.
+        if (IsAnnotation(bestStream) && bestTrack.Count < SparseTrackCues)
         {
-            // Said out loud rather than left to be inferred from a weak correlation: this is the
-            // one case where the reference itself is the likely problem.
-            report.Note =
-                "The only usable track looks like a signs and songs track, which cues on title cards rather than speech. Timing measured against it is unreliable.";
+            report.Note = string.Create(
+                CultureInfo.InvariantCulture,
+                $"The only usable track is titled as signs and songs and carries just {bestTrack.Count} cues, so it marks title cards rather than speech. Timing measured against it is unreliable.");
         }
 
         return new ReferenceTrack(ActivitySignal.FromCues(bestTrack, duration), description, bestTrack);
@@ -397,33 +415,50 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     /// </remarks>
     private static List<MediaStream> SelectStreams(List<MediaStream> streams) =>
         streams
-            // Dialogue first. A signs and songs track cues on title cards and lyrics rather than
-            // speech, so it measures something different from the subtitle being checked - but it
-            // is sorted down rather than removed, because on a file that carries nothing else it is
-            // still the best structure available.
-            .OrderBy(IsAnnotation)
-            .ThenByDescending(IsUsableText)
+            // Text before pictures, because reading it is cheaper - the server caches extraction,
+            // whereas listing packets demuxes the container.
+            .OrderByDescending(IsUsableText)
+            .ThenBy(IsAnnotation)
             .ThenByDescending(s => s.IsDefault)
             .ToList();
 
     /// <summary>
-    /// Reads cue timings from an image-based track's packet headers.
+    /// Matches a library stream to the packet timings ffprobe reported.
     /// </summary>
-    private async Task<(CueTrack? Cues, string Failure)> TryReadPacketTimingsAsync(
+    /// <remarks>
+    /// By index first, and by position among the subtitle streams when that finds nothing. The two
+    /// numbering schemes usually agree and are not guaranteed to: a container with attachments or
+    /// data streams can leave the library's index and ffprobe's pointing at different things, and
+    /// the symptom is a track that silently reads as empty.
+    /// </remarks>
+    private static (CueTrack? Cues, string Failure) ResolvePacketTimings(
         MediaStream stream,
-        BaseItem item,
-        CancellationToken cancellationToken)
+        List<MediaStream> subtitleStreams,
+        IReadOnlyDictionary<int, CueTrack> tracks)
     {
-        if (string.IsNullOrEmpty(item.Path))
+        if (tracks.Count == 0)
         {
-            return (null, "the media file path is unknown");
+            return (null, "ffprobe could not list any subtitle packets");
         }
 
-        var cues = await packetTimings.ReadAsync(item.Path, stream.Index, cancellationToken).ConfigureAwait(false);
+        if (tracks.TryGetValue(stream.Index, out var byIndex) && byIndex.Count > 0)
+        {
+            return (byIndex, string.Empty);
+        }
 
-        return cues is null
-            ? (null, "ffprobe could not list its packets")
-            : (cues, string.Empty);
+        var ordinal = subtitleStreams.OrderBy(s => s.Index).ToList().FindIndex(s => s.Index == stream.Index);
+        var reported = tracks.Keys.OrderBy(k => k).ToList();
+
+        if (ordinal >= 0 && ordinal < reported.Count)
+        {
+            var byOrdinal = tracks[reported[ordinal]];
+            if (byOrdinal.Count > 0)
+            {
+                return (byOrdinal, string.Empty);
+            }
+        }
+
+        return (null, "ffprobe reported no packets for it");
     }
 
     /// <summary>

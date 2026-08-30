@@ -67,3 +67,54 @@ public class PacketDurationTests
             c => Assert.True(c.DurationSeconds <= 1.2001, $"cue ran {c.DurationSeconds:0.000}s"));
     }
 }
+
+/// <summary>
+/// Splitting a combined packet listing back out per stream.
+/// </summary>
+/// <remarks>
+/// Every subtitle track is read in one demux pass now, keyed on the index ffprobe itself reports.
+/// Asking for one stream at a time meant trusting that the index the library reports is the index
+/// ffprobe uses; on the file that prompted this, one track came back with 318 cues and the other
+/// with nothing at all, and the labels said the empty one was the dialogue.
+/// </remarks>
+public class PacketStreamGroupingTests
+{
+    [Fact]
+    public void PacketsAreSplitByTheStreamThatReportedThem()
+    {
+        var grouped = SubtitlePacketTimings.GroupByStream([
+            "4,10.000000,2.000000,8000",
+            "5,10.500000,2.000000,400",
+            "4,15.000000,2.000000,8000",
+            "5,20.000000,2.000000,400",
+            "5,30.000000,2.000000,400",
+        ]);
+
+        Assert.Equal(2, grouped.Count);
+        Assert.Equal(2, grouped[4].Count);
+        Assert.Equal(3, grouped[5].Count);
+        Assert.Equal("10.000000,2.000000,8000", grouped[4][0]);
+    }
+
+    [Fact]
+    public void EachStreamParsesIndependently()
+    {
+        var grouped = SubtitlePacketTimings.GroupByStream([
+            "4,10.000000,2.000000,8000",
+            "4,20.000000,2.000000,8000",
+            "5,12.000000,1.000000,8000",
+        ]);
+
+        Assert.Equal(2, SubtitlePacketTimings.Parse(grouped[4]).Count);
+        Assert.Equal(1, SubtitlePacketTimings.Parse(grouped[5]).Count);
+    }
+
+    [Theory]
+    [InlineData("nonsense")]
+    [InlineData("")]
+    [InlineData(",10.0,2.0,8000")]
+    public void MalformedLinesAreSkipped(string line)
+    {
+        Assert.Empty(SubtitlePacketTimings.GroupByStream([line]));
+    }
+}

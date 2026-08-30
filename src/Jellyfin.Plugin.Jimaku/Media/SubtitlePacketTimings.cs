@@ -143,13 +143,98 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
     }
 
     /// <summary>
-    /// Reads the cue timings of one subtitle stream.
+    /// Reads the cue timings of every subtitle stream in one pass.
     /// </summary>
+    /// <remarks>
+    /// One pass rather than one per track, for two reasons. Listing packets demuxes the whole
+    /// container, so asking twice costs twice; and asking for a particular stream index means
+    /// trusting that the index the library reports is the index ffprobe uses. Reading them all and
+    /// keying on the index ffprobe itself reports removes that assumption - which mattered, because
+    /// a file whose two subtitle tracks were requested individually returned 318 cues for one and
+    /// nothing at all for the other.
+    /// </remarks>
     /// <param name="mediaPath">Path to the media file.</param>
-    /// <param name="streamIndex">The absolute stream index within the container.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The cues, or null when they could not be read.</returns>
-    public async Task<CueTrack?> ReadAsync(string mediaPath, int streamIndex, CancellationToken cancellationToken)
+    /// <returns>Cues by stream index, empty when nothing could be read.</returns>
+    public async Task<IReadOnlyDictionary<int, CueTrack>> ReadAllAsync(
+        string mediaPath,
+        CancellationToken cancellationToken)
+    {
+        var empty = new Dictionary<int, CueTrack>();
+
+        if (!IsAvailable)
+        {
+            logger.LogDebug("ffprobe is not available; cannot read subtitle packet timings.");
+            return empty;
+        }
+
+        var lines = await RunAsync(
+            mediaPath,
+            ["-select_streams", "s", "-show_entries", "packet=stream_index,pts_time,duration_time,size"],
+            cancellationToken).ConfigureAwait(false);
+
+        if (lines is null)
+        {
+            return empty;
+        }
+
+        var byStream = GroupByStream(lines);
+
+        var tracks = new Dictionary<int, CueTrack>();
+        foreach (var (index, packets) in byStream)
+        {
+            var track = Parse(packets);
+            tracks[index] = track;
+
+            logger.LogInformation(
+                "Stream {Index} of {Path}: {Packets} packets, {Cues} cues, median {Median:0.00}s, on screen {Duty:P0}.",
+                index,
+                mediaPath,
+                packets.Count,
+                track.Count,
+                MedianDuration(track),
+                DutyCycle(track));
+        }
+
+        return tracks;
+    }
+
+    /// <summary>
+    /// Splits a combined packet listing by the stream index ffprobe reported for each packet.
+    /// </summary>
+    /// <param name="lines">CSV lines of <c>stream_index,pts_time,duration_time,size</c>.</param>
+    /// <returns>The remaining fields of each line, grouped by stream.</returns>
+    public static Dictionary<int, List<string>> GroupByStream(IEnumerable<string> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+
+        var byStream = new Dictionary<int, List<string>>();
+
+        foreach (var line in lines)
+        {
+            var comma = line.IndexOf(',', StringComparison.Ordinal);
+            if (comma <= 0
+                || !int.TryParse(line[..comma], NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
+            {
+                continue;
+            }
+
+            if (!byStream.TryGetValue(index, out var packets))
+            {
+                packets = [];
+                byStream[index] = packets;
+            }
+
+            packets.Add(line[(comma + 1)..]);
+        }
+
+        return byStream;
+    }
+
+    private async Task<List<string>?> RunAsync(
+        string mediaPath,
+        string[] selection,
+        CancellationToken cancellationToken)
     {
         if (!IsAvailable)
         {
@@ -166,17 +251,18 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
         };
 
         // Packet headers only: no decoding, no image handling, and nothing is written to disk.
-        foreach (var argument in new[]
-                 {
-                     "-hide_banner", "-v", "error",
-                     "-select_streams", streamIndex.ToString(CultureInfo.InvariantCulture),
-                     "-show_entries", "packet=pts_time,duration_time,size",
-                     "-of", "csv=p=0",
-                     mediaPath,
-                 })
+        startInfo.ArgumentList.Add("-hide_banner");
+        startInfo.ArgumentList.Add("-v");
+        startInfo.ArgumentList.Add("error");
+
+        foreach (var argument in selection)
         {
             startInfo.ArgumentList.Add(argument);
         }
+
+        startInfo.ArgumentList.Add("-of");
+        startInfo.ArgumentList.Add("csv=p=0");
+        startInfo.ArgumentList.Add(mediaPath);
 
         try
         {
@@ -197,25 +283,13 @@ public sealed class SubtitlePacketTimings(IMediaEncoder mediaEncoder, ILogger<Su
             {
                 var error = await stderrTask.ConfigureAwait(false);
                 logger.LogWarning(
-                    "Reading subtitle packet timings from stream {Index} of {Path} failed: {Error}",
-                    streamIndex,
+                    "Reading subtitle packet timings from {Path} failed: {Error}",
                     mediaPath,
                     error.Trim());
                 return null;
             }
 
-            var track = Parse(lines);
-
-            logger.LogInformation(
-                "Read {Cues} cue timings from image-based stream {Index} of {Path} ({Packets} packets, median cue {Median:0.00}s, on screen {Duty:P0}).",
-                track.Count,
-                streamIndex,
-                mediaPath,
-                lines.Count,
-                MedianDuration(track),
-                DutyCycle(track));
-
-            return track;
+            return lines;
         }
         catch (OperationCanceledException)
         {
