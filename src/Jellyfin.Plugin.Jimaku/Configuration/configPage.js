@@ -92,6 +92,8 @@ function testKey(view) {
 // series first, then list its episodes.
 function searchSeries(view, term) {
     const container = view.querySelector('#EpisodeResults');
+    parkDetail(view);
+
     if (!term || term.length < 2) {
         container.innerHTML = '';
         return;
@@ -123,7 +125,8 @@ function searchSeries(view, term) {
 
 function loadEpisodes(view, seriesId, seriesName) {
     const container = view.querySelector('#EpisodeResults');
-    container.innerHTML = '<p class="fieldDescription">Loading episodes…</p>';
+    parkDetail(view);
+    container.innerHTML = '<p class="fieldDescription">Loading episodes\u2026</p>';
 
     ApiClient.getItems(ApiClient.getCurrentUserId(), {
         ParentId: seriesId,
@@ -153,38 +156,62 @@ function loadEpisodes(view, seriesId, seriesName) {
                 <span>Replace subtitles that are already there</span>
             </label>`;
 
-        let season = null;
+        // Grouped and collapsed. A long-running show is seventy episodes, and listing them all at
+        // once buried everything else on the page - including the results of whatever you clicked.
+        const seasons = new Map();
         for (const item of result.Items) {
-            if (item.ParentIndexNumber !== season) {
-                season = item.ParentIndexNumber;
-                const label = `${seriesName} season ${season ?? '?'}`;
-                html += `<div style="margin:0.75em 0 0.25em;font-weight:600;">Season ${season ?? '?'}
-                    ${item.SeasonId ? `<button is="emby-button" type="button" class="raised jimaku-sweep-parent"
-                        data-id="${item.SeasonId}" data-label="${escapeHtml(label)}" style="margin-left:0.5em;font-weight:400;">
-                        <span>Fetch this season</span></button>` : ''}</div>`;
+            const key = item.ParentIndexNumber ?? -1;
+            if (!seasons.has(key)) {
+                seasons.set(key, { seasonId: item.SeasonId, items: [] });
             }
 
-            // Flag episodes that already have Japanese subtitles, so it is obvious which ones
-            // are worth acting on.
-            const hasJapanese = (item.MediaStreams || []).some(st =>
-                st.Type === 'Subtitle' && (st.Language === 'jpn' || st.Language === 'ja'));
+            seasons.get(key).items.push(item);
+        }
 
-            const code = `S${String(item.ParentIndexNumber ?? 0).padStart(2, '0')}E${String(item.IndexNumber ?? 0).padStart(2, '0')}`;
-            const mark = hasJapanese
-                ? '<span title="already has a Japanese subtitle track" style="opacity:0.7;">[JA]</span> '
-                : '';
+        const hasJapanese = item => (item.MediaStreams || []).some(st =>
+            st.Type === 'Subtitle' && (st.Language === 'jpn' || st.Language === 'ja'));
 
-            html += `<div style="display:flex;gap:0.5em;align-items:center;margin:0.2em 0;flex-wrap:wrap;">
-                <span style="flex:1 1 20em;">${mark}<code>${code}</code> ${escapeHtml(item.Name || '')}</span>
-                <button is="emby-button" type="button" class="raised jimaku-auto" data-id="${item.Id}">
-                    <span>Fetch best</span></button>
-                <button is="emby-button" type="button" class="raised jimaku-list" data-id="${item.Id}">
-                    <span>Show candidates</span></button>
-                <button is="emby-button" type="button" class="raised jimaku-history" data-id="${item.Id}">
-                    <span>What's attached?</span></button>
-                <button is="emby-button" type="button" class="raised jimaku-reference" data-id="${item.Id}">
-                    <span>What's it comparing to?</span></button>
-            </div>`;
+        for (const [season, group] of seasons) {
+            const missing = group.items.filter(i => !hasJapanese(i)).length;
+            const label = `${seriesName} season ${season < 0 ? '?' : season}`;
+
+            const summary = missing
+                ? `${group.items.length} episodes, ${missing} without Japanese subtitles`
+                : `${group.items.length} episodes, all have Japanese subtitles`;
+
+            html += `<div style="margin:0.75em 0 0.25em;display:flex;gap:0.5em;align-items:center;flex-wrap:wrap;">
+                <button is="emby-button" type="button" class="raised jimaku-season-toggle"
+                        data-season="${season}"><span>&#9656; Season ${season < 0 ? '?' : season}</span></button>
+                <span class="fieldDescription" style="margin:0;">${summary}</span>
+                ${group.seasonId ? `<button is="emby-button" type="button" class="raised jimaku-sweep-parent"
+                    data-id="${group.seasonId}" data-label="${escapeHtml(label)}">
+                    <span>Fetch this season</span></button>` : ''}
+            </div>
+            <div class="jimaku-season" data-season="${season}" style="display:none;">`;
+
+            for (const item of group.items) {
+                const code = `S${String(item.ParentIndexNumber ?? 0).padStart(2, '0')}E${String(item.IndexNumber ?? 0).padStart(2, '0')}`;
+                const mark = hasJapanese(item)
+                    ? '<span title="already has a Japanese subtitle track" style="opacity:0.7;">[JA]</span> '
+                    : '';
+
+                // Two actions, not four. The diagnostics are for when something looks wrong, so
+                // they sit as quiet links rather than competing with the buttons you actually use.
+                html += `<div class="jimaku-episode" data-id="${item.Id}"
+                        style="display:flex;gap:0.5em;align-items:center;margin:0.15em 0;flex-wrap:wrap;">
+                    <span style="flex:1 1 20em;">${mark}<code>${code}</code> ${escapeHtml(item.Name || '')}</span>
+                    <button is="emby-button" type="button" class="raised jimaku-auto" data-id="${item.Id}">
+                        <span>Fetch best</span></button>
+                    <button is="emby-button" type="button" class="raised jimaku-list" data-id="${item.Id}">
+                        <span>Candidates</span></button>
+                    <a is="emby-linkbutton" href="#" class="button-link jimaku-history" data-id="${item.Id}"
+                       style="font-size:0.9em;opacity:0.8;">attached?</a>
+                    <a is="emby-linkbutton" href="#" class="button-link jimaku-reference" data-id="${item.Id}"
+                       style="font-size:0.9em;opacity:0.8;">reference?</a>
+                </div>`;
+            }
+
+            html += '</div>';
         }
 
         container.innerHTML = html;
@@ -192,6 +219,36 @@ function loadEpisodes(view, seriesId, seriesName) {
     }).catch(err => {
         container.innerHTML = '<p class="fieldDescription">Could not load episodes: ' + escapeHtml(err) + '</p>';
     });
+}
+
+/// Returns the detail panel to its own place before the episode list is rebuilt.
+///
+/// Without this it is a child of the list, and replacing the list's contents deletes it - after
+/// which every render target is missing and nothing reports anything.
+function parkDetail(view) {
+    const detail = view.querySelector('#EpisodeDetail');
+    const results = view.querySelector('#EpisodeResults');
+
+    if (detail && results && detail.parentElement !== results.parentElement) {
+        results.after(detail);
+    }
+}
+
+/// Moves the result panels directly beneath the episode being acted on, and clears them.
+function focusEpisode(view, itemId) {
+    const detail = view.querySelector('#EpisodeDetail');
+    const row = view.querySelector(`.jimaku-episode[data-id="${itemId}"]`);
+
+    view.querySelector('#ActionStatus').innerHTML = '';
+    view.querySelector('#HistoryResults').innerHTML = '';
+    view.querySelector('#ReferenceResults').innerHTML = '';
+    view.querySelector('#CandidateResults').innerHTML = '';
+
+    // Output belongs next to the thing it describes. Fixed panels at the foot of the page meant
+    // clicking an episode near the top sent its answer thousands of pixels away.
+    if (detail && row && row.nextElementSibling !== detail) {
+        row.after(detail);
+    }
 }
 
 // ApiClient.ajax rejects with a fetch Response, which stringifies to "[object Response]" and
@@ -702,8 +759,23 @@ export default function (view) {
             return;
         }
 
+        const seasonToggle = e.target.closest('.jimaku-season-toggle');
+        if (seasonToggle) {
+            const body = view.querySelector(`.jimaku-season[data-season="${seasonToggle.dataset.season}"]`);
+            if (body) {
+                const open = body.style.display !== 'none';
+                body.style.display = open ? 'none' : '';
+                const caption = seasonToggle.querySelector('span');
+                if (caption) {
+                    caption.innerHTML = caption.innerHTML.replace(open ? '\u25be' : '\u25b8', open ? '\u25b8' : '\u25be');
+                }
+            }
+
+            return;
+        }
+
         const auto = e.target.closest('.jimaku-auto');
-        if (auto) { runAuto(view, auto.dataset.id); return; }
+        if (auto) { focusEpisode(view, auto.dataset.id); runAuto(view, auto.dataset.id); return; }
 
         const reject = e.target.closest('.jimaku-reject');
         if (reject) {
@@ -727,20 +799,22 @@ export default function (view) {
 
         const showReference = e.target.closest('.jimaku-reference');
         if (showReference) {
-            view.querySelector('#CandidateResults').innerHTML = '';
+            e.preventDefault();
+            focusEpisode(view, showReference.dataset.id);
             loadReference(view, showReference.dataset.id);
             return;
         }
 
         const showHistory = e.target.closest('.jimaku-history');
         if (showHistory) {
-            view.querySelector('#CandidateResults').innerHTML = '';
+            e.preventDefault();
+            focusEpisode(view, showHistory.dataset.id);
             loadHistory(view, showHistory.dataset.id);
             return;
         }
 
         const list = e.target.closest('.jimaku-list');
-        if (list) { listCandidates(view, list.dataset.id); return; }
+        if (list) { focusEpisode(view, list.dataset.id); listCandidates(view, list.dataset.id); return; }
 
         const shift = e.target.closest('.jimaku-apply-offset');
         if (shift) {

@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 33
+version: 34
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,7 +16,9 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Document the drift that is not the plugin's. Jellyfin loses external subtitle sync whenever the
-    video or audio is transcoded, and the error grows through the episode - which looks exactly like
-    a badly matched subtitle. Direct play is unaffected, and lossless audio is the usual reason a
-    file transcodes at all.
+  - Make the episode list usable on a long-running show. Seasons are collapsed and summarised by
+    how many episodes still lack Japanese subtitles, rather than listing seventy episodes at once.
+  - Show an episode's result underneath the episode. The panels sat at the foot of the page, so
+    acting on something near the top sent its answer thousands of pixels away from the click.
+  - Reduce each episode to two buttons. The two diagnostics are for when something looks wrong and
+    now sit as quiet links instead of competing with the actions actually used.
