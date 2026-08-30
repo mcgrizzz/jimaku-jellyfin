@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.29.0",
+                "changelog": "- Show the reference's own cue times. Every number the plugin reports is measured against that\n  reference, so when it is wrong they all agree with it and none of them can reveal the error.\n  These can be checked against the episode itself: play it with that subtitle track on and see\n  whether the times match.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.29.0.zip",
+                "checksum": "d1694deedbafaa758fe146b8db48120a",
+                "timestamp": "2026-08-30T16:10:23Z"
+            },
+            {
                 "version": "1.0.28.0",
                 "changelog": "- Fix drift correction failing to fire on the comparison it is most often needed for. The\n  refinement was checked with a score computed differently from the one it had to beat, so it\n  quietly declined; and it inherited the uncorrected fit's uniqueness, meaning a drift could be\n  measured correctly and then rejected for the vagueness the correction had just removed. It also\n  now measures repeatedly until it converges - one pass left half a second across an episode,\n  which is the whole matching tolerance.\n- Always write a subtitle picked in a client's own subtitle dialog. That dialog cannot explain a\n  refusal: the download just fails, with no reason and no way to override. The measured\n  correction is applied when one was found.\n- Treat 1920x1080 and 1080p as the same resolution. Release names use both, and the disc-sourced\n  candidate was losing a match it had earned to a stream rip that spelled it the other way.\n- Stop recording a trailing [sdh] or [cc] as a release group. It sits where a group tag sits and\n  parses as one, and the series preference would have learned that a show is best served by the\n  group \"sdh\".",
                 "targetAbi": "10.11.0.0",

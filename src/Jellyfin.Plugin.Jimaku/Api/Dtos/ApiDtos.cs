@@ -366,6 +366,9 @@ public class ReferenceReportDto
     /// <summary>Gets or sets the share of the episode the reference has something on screen.</summary>
     public double DutyCycle { get; set; }
 
+    /// <summary>Gets or sets sample cue times from the reference, for checking against the episode.</summary>
+    public IReadOnlyList<string> SampleCues { get; set; } = Array.Empty<string>();
+
     /// <summary>Gets or sets every subtitle stream that was considered.</summary>
     public IReadOnlyList<ReferenceStreamDto> Streams { get; set; } = Array.Empty<ReferenceStreamDto>();
 }

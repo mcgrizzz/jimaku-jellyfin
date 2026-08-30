@@ -503,6 +503,12 @@ function renderReference(view, report) {
              + `&middot; on screen ${(report.DutyCycle * 100).toFixed(0)}% of the episode</div>`;
     }
 
+    if ((report.SampleCues || []).length) {
+        html += `<div class="fieldDescription" style="margin-bottom:0.5em;">`
+             + `Reference cue times &mdash; play the episode with that track on and check one: `
+             + `<code>${report.SampleCues.map(escapeHtml).join('</code> <code>')}</code></div>`;
+    }
+
     if (report.Note) {
         html += `<div class="fieldDescription" style="margin-bottom:0.5em;">${escapeHtml(report.Note)}</div>`;
     }

@@ -78,6 +78,17 @@ public sealed class ReferenceReport
     /// <summary>Gets or sets every subtitle stream that was considered.</summary>
     public List<ReferenceStreamInfo> Streams { get; set; } = [];
 
+    /// <summary>
+    /// Gets or sets the first and last few cue times of the chosen reference, as timestamps.
+    /// </summary>
+    /// <remarks>
+    /// The one diagnostic that can be checked against reality without any of the plugin's own
+    /// machinery: play the episode, note when that subtitle track appears on screen, and compare.
+    /// Everything else the plugin reports is measured against this reference, so if it is wrong
+    /// every number downstream agrees with it and none of them can reveal the error.
+    /// </remarks>
+    public List<string> SampleCues { get; set; } = [];
+
     /// <summary>Gets or sets how many cues the chosen reference carries.</summary>
     public int Cues { get; set; }
 

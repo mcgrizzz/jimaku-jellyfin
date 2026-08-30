@@ -205,6 +205,7 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         report.Cues = bestTrack.Count;
         report.MedianCueSeconds = SubtitlePacketTimings.MedianDuration(bestTrack);
         report.DutyCycle = SubtitlePacketTimings.DutyCycle(bestTrack);
+        report.SampleCues = SampleCues(bestTrack);
 
         // A reference that is on almost all the time carries no timing information: every offset
         // correlates about equally well with it, so the candidates all score alike and whichever
@@ -330,6 +331,35 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                     : $"image-based ({stream.Codec ?? "unknown"}); timings readable from packet headers",
             });
         }
+    }
+
+    /// <summary>
+    /// Takes the first and last few cue times, so the reference can be checked against the episode
+    /// itself rather than only against the plugin's own measurements.
+    /// </summary>
+    private static List<string> SampleCues(CueTrack track)
+    {
+        static string Stamp(double seconds) =>
+            TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"hh\:mm\:ss\.ff", CultureInfo.InvariantCulture);
+
+        var samples = new List<string>();
+
+        foreach (var cue in track.Cues.Take(4))
+        {
+            samples.Add(Stamp(cue.StartSeconds) + " - " + Stamp(cue.EndSeconds));
+        }
+
+        if (track.Count > 8)
+        {
+            samples.Add("...");
+        }
+
+        foreach (var cue in track.Cues.Skip(Math.Max(4, track.Count - 4)))
+        {
+            samples.Add(Stamp(cue.StartSeconds) + " - " + Stamp(cue.EndSeconds));
+        }
+
+        return samples;
     }
 
     private static bool IsAnnotation(MediaStream stream)

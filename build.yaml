@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 29
+version: 30
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,17 +16,7 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Fix drift correction failing to fire on the comparison it is most often needed for. The
-    refinement was checked with a score computed differently from the one it had to beat, so it
-    quietly declined; and it inherited the uncorrected fit's uniqueness, meaning a drift could be
-    measured correctly and then rejected for the vagueness the correction had just removed. It also
-    now measures repeatedly until it converges - one pass left half a second across an episode,
-    which is the whole matching tolerance.
-  - Always write a subtitle picked in a client's own subtitle dialog. That dialog cannot explain a
-    refusal: the download just fails, with no reason and no way to override. The measured
-    correction is applied when one was found.
-  - Treat 1920x1080 and 1080p as the same resolution. Release names use both, and the disc-sourced
-    candidate was losing a match it had earned to a stream rip that spelled it the other way.
-  - Stop recording a trailing [sdh] or [cc] as a release group. It sits where a group tag sits and
-    parses as one, and the series preference would have learned that a show is best served by the
-    group "sdh".
+  - Show the reference's own cue times. Every number the plugin reports is measured against that
+    reference, so when it is wrong they all agree with it and none of them can reveal the error.
+    These can be checked against the episode itself: play it with that subtitle track on and see
+    whether the times match.

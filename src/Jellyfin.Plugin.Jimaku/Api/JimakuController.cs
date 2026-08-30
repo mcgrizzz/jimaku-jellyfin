@@ -279,6 +279,7 @@ public class JimakuController(
             Cues = report.Cues,
             MedianCueSeconds = report.MedianCueSeconds,
             DutyCycle = report.DutyCycle,
+            SampleCues = report.SampleCues,
             Streams = report.Streams.Select(s => new ReferenceStreamDto
             {
                 Index = s.Index,
