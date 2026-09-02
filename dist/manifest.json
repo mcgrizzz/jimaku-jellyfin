@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.34.0",
+                "changelog": "- Find episodes in a season Jimaku holds as two entries. A split cour airs as two runs, AniList\n  gives each its own entry numbered from one, and Jellyfin shows the season numbered straight\n  through - so the later episodes live in the second entry under different numbers, and asking\n  the first for them found nothing at all.\n- Stop an AniList ID recorded on the series from overriding that. It names one entry, so it is\n  right for the first cour and silently wrong for every episode after it; the mapping table,\n  which knows a season can be two entries, now leads and the series ID is kept as a fallback.\n- Open season archives with the episode number that found the file rather than the one Jellyfin\n  shows. For a split cour they differ, and the wrong number extracts a different episode.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.34.0.zip",
+                "checksum": "b754907dc7a17de1fd45e5c3e9bc0b1d",
+                "timestamp": "2026-09-02T19:48:13Z"
+            },
+            {
                 "version": "1.0.33.0",
                 "changelog": "- Make the episode list usable on a long-running show. Seasons are collapsed and summarised by\n  how many episodes still lack Japanese subtitles, rather than listing seventy episodes at once.\n- Show an episode's result underneath the episode. The panels sat at the foot of the page, so\n  acting on something near the top sent its answer thousands of pixels away from the click.\n- Reduce each episode to two buttons. The two diagnostics are for when something looks wrong and\n  now sit as quiet links instead of competing with the actions actually used.",
                 "targetAbi": "10.11.0.0",

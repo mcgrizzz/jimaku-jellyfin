@@ -43,6 +43,13 @@ public readonly record struct AnimeLookup(
 public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeIdResolver> logger)
 {
     /// <summary>
+    /// How many ways of finding one episode are worth trying. A split cour needs two; more than a
+    /// handful means the identifiers disagree so badly that spending requests on all of them is
+    /// worse than reporting the failure.
+    /// </summary>
+    private const int MaxLookups = 4;
+
+    /// <summary>
     /// Resolves the lookup for an episode.
     /// </summary>
     /// <param name="episode">The episode.</param>
@@ -50,16 +57,58 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
     /// <returns>The lookup.</returns>
     public async Task<AnimeLookup> ResolveAsync(Episode episode, CancellationToken cancellationToken)
     {
+        var all = await ResolveAllAsync(episode, cancellationToken).ConfigureAwait(false);
+        return all.Count > 0 ? all[0] : new AnimeLookup(null, null, null, null, "no usable identifier");
+    }
+
+    /// <summary>
+    /// Resolves every way this episode might be found on Jimaku, most likely first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// More than one, because a single season is regularly two AniList entries. A split cour airs
+    /// as two runs of twelve, AniList gives each its own entry numbered from one, and TVDB - which
+    /// is what Jellyfin shows - numbers the season straight through to twenty-four. Episode
+    /// nineteen therefore lives in the second entry as its episode seven, and asking the first
+    /// entry for episode nineteen finds nothing at all.
+    /// </para>
+    /// <para>
+    /// An AniList ID recorded on the series cannot express this: it names one entry, so it is right
+    /// for the first cour and wrong for every episode after it. Returning the alternatives and
+    /// trying each is cheap - Jimaku filters by episode server-side, so the entry that does not
+    /// contain it simply returns nothing - and it removes the need to be right first time.
+    /// </para>
+    /// </remarks>
+    /// <param name="episode">The episode.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The lookups to try, in order.</returns>
+    public async Task<IReadOnlyList<AnimeLookup>> ResolveAllAsync(
+        Episode episode,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(episode);
 
         var series = episode.Series;
         var episodeNumber = episode.IndexNumber;
         var seasonNumber = episode.ParentIndexNumber;
+        var lookups = new List<AnimeLookup>();
 
-        // Best case: a metadata plugin already recorded the AniList ID on the series.
+        // The mapping table leads, because it is the only source that knows a season can be two
+        // entries. A series-level AniList ID is kept as an alternative rather than a first choice:
+        // it is exact for a single-cour show and silently wrong past the first cour of a split one.
+        if (TryGetInt(series, MetadataProvider.Tvdb.ToString(), out var tvdbId) && episodeNumber.HasValue)
+        {
+            var rows = await mappings.GetByTvdbIdAsync(tvdbId, cancellationToken).ConfigureAwait(false);
+
+            foreach (var candidate in SelectAllFromTvdbMappings(rows, seasonNumber, episodeNumber.Value))
+            {
+                Add(candidate);
+            }
+        }
+
         if (TryGetInt(series, "AniList", out var aniListId))
         {
-            return new AnimeLookup(aniListId, null, null, episodeNumber, "AniList ID from series metadata");
+            Add(new AnimeLookup(aniListId, null, null, episodeNumber, "AniList ID from series metadata"));
         }
 
         if (TryGetInt(series, "AniDB", out var aniDbId))
@@ -67,28 +116,49 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
             var mapping = await mappings.GetByAniDbIdAsync(aniDbId, cancellationToken).ConfigureAwait(false);
             if (mapping?.AniListId is { } fromAniDb)
             {
-                return new AnimeLookup(fromAniDb, null, null, episodeNumber, "AniList ID mapped from AniDB");
+                Add(new AnimeLookup(fromAniDb, null, null, episodeNumber, "AniList ID mapped from AniDB"));
             }
         }
 
-        if (TryGetInt(series, MetadataProvider.Tvdb.ToString(), out var tvdbId) && episodeNumber.HasValue)
+        if (lookups.Count > 0)
         {
-            var resolved = await ResolveFromTvdbAsync(tvdbId, seasonNumber, episodeNumber.Value, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (resolved.HasValue)
+            if (lookups.Count > 1)
             {
-                return resolved.Value;
+                logger.LogDebug(
+                    "{Name} S{Season}E{Episode} could be any of {Count} entries: {Lookups}.",
+                    episode.SeriesName,
+                    seasonNumber,
+                    episodeNumber,
+                    lookups.Count,
+                    string.Join(", ", lookups.Select(l => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"AniList {l.AniListId} episode {l.EpisodeNumber}"))));
             }
+
+            return lookups;
         }
 
         if (series is not null &&
             series.ProviderIds.TryGetValue(MetadataProvider.Tmdb.ToString(), out var tmdbId) &&
             !string.IsNullOrWhiteSpace(tmdbId))
         {
-            return new AnimeLookup(null, tmdbId, null, episodeNumber, "TMDB ID from series metadata");
+            return [new AnimeLookup(null, tmdbId, null, episodeNumber, "TMDB ID from series metadata")];
         }
 
+        return [NameLookup(series, episode, seasonNumber, episodeNumber)];
+
+        void Add(AnimeLookup lookup)
+        {
+            if (lookups.Count < MaxLookups
+                && !lookups.Any(l => l.AniListId == lookup.AniListId && l.EpisodeNumber == lookup.EpisodeNumber))
+            {
+                lookups.Add(lookup);
+            }
+        }
+    }
+
+    private static AnimeLookup NameLookup(Series? series, Episode episode, int? seasonNumber, int? episodeNumber)
+    {
         var name = series?.Name ?? episode.SeriesName;
         if (!string.IsNullOrWhiteSpace(name))
         {
@@ -102,29 +172,6 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
         }
 
         return new AnimeLookup(null, null, null, episodeNumber, "no usable identifier");
-    }
-
-    private async Task<AnimeLookup?> ResolveFromTvdbAsync(
-        int tvdbId,
-        int? seasonNumber,
-        int episodeNumber,
-        CancellationToken cancellationToken)
-    {
-        var rows = await mappings.GetByTvdbIdAsync(tvdbId, cancellationToken).ConfigureAwait(false);
-        var lookup = SelectFromTvdbMappings(rows, seasonNumber, episodeNumber);
-
-        if (lookup.HasValue && lookup.Value.EpisodeNumber != episodeNumber)
-        {
-            logger.LogDebug(
-                "TVDB {TvdbId} S{Season}E{Episode} maps to AniList {AniListId} episode {Adjusted}.",
-                tvdbId,
-                seasonNumber,
-                episodeNumber,
-                lookup.Value.AniListId,
-                lookup.Value.EpisodeNumber);
-        }
-
-        return lookup;
     }
 
     /// <summary>
@@ -148,42 +195,67 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
         int? seasonNumber,
         int episodeNumber)
     {
+        var all = SelectAllFromTvdbMappings(rows, seasonNumber, episodeNumber);
+        return all.Count > 0 ? all[0] : null;
+    }
+
+    /// <summary>
+    /// Lists every mapping row that could account for a TVDB season and episode, best first.
+    /// </summary>
+    /// <remarks>
+    /// The row whose offset the episode falls past is the intended one and comes first. The others
+    /// follow because the boundary between two cours is not always where the mapping says: a recap
+    /// episode counted by one source and not the other moves it by one, and an episode on the wrong
+    /// side of it is invisible if only a single row is ever tried. Asking a second entry costs one
+    /// request and cannot produce a wrong answer, since an entry that does not hold the episode
+    /// returns nothing.
+    /// </remarks>
+    /// <param name="rows">Candidate mappings for the TVDB series.</param>
+    /// <param name="seasonNumber">The TVDB season number, if known.</param>
+    /// <param name="episodeNumber">The TVDB episode number.</param>
+    /// <returns>The lookups, most likely first.</returns>
+    internal static IReadOnlyList<AnimeLookup> SelectAllFromTvdbMappings(
+        IReadOnlyList<AnimeIdMapping> rows,
+        int? seasonNumber,
+        int episodeNumber)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
         if (rows.Count == 0)
         {
-            return null;
+            return [];
         }
 
         var absolute = rows.FirstOrDefault(r => r.TvdbSeason == -1 && r.AniListId.HasValue);
         if (absolute?.AniListId is { } absoluteId)
         {
-            return new AnimeLookup(
-                absoluteId,
-                null,
-                null,
-                episodeNumber,
-                "AniList ID mapped from TVDB (absolute numbering)");
+            return
+            [
+                new AnimeLookup(
+                    absoluteId,
+                    null,
+                    null,
+                    episodeNumber,
+                    "AniList ID mapped from TVDB (absolute numbering)")
+            ];
         }
 
-        var forSeason = rows
+        return rows
             .Where(r => r.AniListId.HasValue)
             .Where(r => !seasonNumber.HasValue || r.TvdbSeason == seasonNumber.Value)
+
+            // An offset at or past the episode would map it to zero or below, which is no episode.
             .Where(r => r.TvdbEpisodeOffset < episodeNumber)
             .OrderByDescending(r => r.TvdbEpisodeOffset)
-            .FirstOrDefault();
-
-        if (forSeason?.AniListId is not { } seasonId)
-        {
-            return null;
-        }
-
-        return new AnimeLookup(
-            seasonId,
-            null,
-            null,
-            episodeNumber - forSeason.TvdbEpisodeOffset,
-            forSeason.TvdbEpisodeOffset == 0
-                ? "AniList ID mapped from TVDB"
-                : string.Create(CultureInfo.InvariantCulture, $"AniList ID mapped from TVDB (episode offset {forSeason.TvdbEpisodeOffset})"));
+            .Select(r => new AnimeLookup(
+                r.AniListId!.Value,
+                null,
+                null,
+                episodeNumber - r.TvdbEpisodeOffset,
+                r.TvdbEpisodeOffset == 0
+                    ? "AniList ID mapped from TVDB"
+                    : string.Create(CultureInfo.InvariantCulture, $"AniList ID mapped from TVDB (episode offset {r.TvdbEpisodeOffset})")))
+            .ToList();
     }
 
     private static bool TryGetInt(Series? item, string key, out int value)

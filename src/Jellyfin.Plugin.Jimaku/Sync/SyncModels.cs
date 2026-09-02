@@ -48,6 +48,16 @@ public sealed class SubtitleCandidate
     public bool PreviouslyRejected { get; set; }
 
     /// <summary>
+    /// Gets or sets the episode number under which this file was found.
+    /// </summary>
+    /// <remarks>
+    /// Not always the episode number Jellyfin shows. A split cour is one season in the library and
+    /// two entries on Jimaku, each numbered from one, so the same episode is nineteen in one
+    /// numbering and seven in the other.
+    /// </remarks>
+    public int? EpisodeNumber { get; set; }
+
+    /// <summary>
     /// Gets or sets the timing verdict, populated only once the file has actually been downloaded
     /// and analysed. Listing candidates deliberately skips this so the UI stays responsive.
     /// </summary>

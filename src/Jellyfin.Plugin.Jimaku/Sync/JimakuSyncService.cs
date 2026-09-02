@@ -60,83 +60,72 @@ public sealed class JimakuSyncService(
             throw new JimakuApiException("No Jimaku API key is configured.");
         }
 
-        var lookup = await idResolver.ResolveAsync(episode, cancellationToken).ConfigureAwait(false);
-        if (!lookup.IsUsable)
+        var lookups = await idResolver.ResolveAllAsync(episode, cancellationToken).ConfigureAwait(false);
+        var usableLookups = lookups.Where(l => l.IsUsable).ToList();
+
+        if (usableLookups.Count == 0)
         {
-            logger.LogInformation("Cannot identify {Name}: {Reason}.", episode.Name, lookup.Description);
+            var reason = lookups.Count > 0 ? lookups[0].Description : "no usable identifier";
+            logger.LogInformation("Cannot identify {Name}: {Reason}.", episode.Name, reason);
             return Array.Empty<SubtitleCandidate>();
         }
 
-        logger.LogDebug("Identifying {Name} via {Description}.", episode.Name, lookup.Description);
-
-        // Every episode of a series resolves to the same entries, so searching once per episode
-        // spends a 25-per-minute budget re-asking a settled question. On a 24-episode sweep that
-        // was half the requests.
         var seriesId = episode.SeriesId;
-        var lookupKey = LookupKey(lookup);
-        var entries = profiles.GetEntries(seriesId, lookupKey, configuration.SeriesEntryCacheHours);
-
-        if (entries is null)
-        {
-            var found = await SearchEntriesAsync(lookup, configuration.ApiKey, cancellationToken)
-                .ConfigureAwait(false);
-
-            entries = found.Select(e => new SeriesEntry
-            {
-                Id = e.Id,
-                Name = e.Name,
-                Notes = e.Notes ?? string.Empty,
-                Unverified = e.Flags.Unverified,
-            }).ToList();
-
-            if (entries.Count > 0)
-            {
-                await profiles.RememberEntriesAsync(seriesId, lookupKey, entries, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-        }
-        else
-        {
-            logger.LogDebug(
-                "Reusing {Count} cached Jimaku entries for {Series}.",
-                entries.Count,
-                episode.SeriesName);
-        }
-
-        if (entries.Count == 0)
-        {
-            return Array.Empty<SubtitleCandidate>();
-        }
-
         var videoName = Path.GetFileName(episode.Path) ?? string.Empty;
         var candidates = new List<SubtitleCandidate>();
+        var seen = new HashSet<(long Entry, string File)>();
 
-        foreach (var entry in entries)
+        // Each lookup is a different way the episode might be numbered, and a split cour needs two:
+        // one season, two AniList entries, each numbered from one. The entry that does not contain
+        // the episode returns nothing, so trying both costs a request and cannot mislead.
+        foreach (var lookup in usableLookups)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var files = await GetFilesAsync(entry.Id, lookup, configuration.ApiKey, cancellationToken)
+            logger.LogDebug("Identifying {Name} via {Description}.", episode.Name, lookup.Description);
+
+            var entries = await GetEntriesAsync(episode, lookup, configuration, cancellationToken)
                 .ConfigureAwait(false);
 
-            if (files.Count == 0)
+            foreach (var entry in entries)
             {
-                continue;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var files = await GetFilesAsync(entry.Id, lookup, configuration.ApiKey, cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (var filtered in CandidateFilter.Filter(files, configuration.AllowArchives))
+                {
+                    if (!seen.Add((entry.Id, filtered.File.Name)))
+                    {
+                        continue;
+                    }
+
+                    candidates.Add(new SubtitleCandidate
+                    {
+                        EntryId = entry.Id,
+                        EntryName = entry.Name,
+                        EntryNotes = entry.Notes,
+                        EntryUnverified = entry.Unverified,
+                        File = filtered.File,
+                        Rejection = filtered.Rejection,
+                        NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),
+                        Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
+                        ReleaseGroup = ReleaseInfo.Parse(filtered.File.Name).ReleaseGroup,
+
+                        // Carried per candidate, not per episode: two lookups number the same
+                        // episode differently, and opening an archive needs the number that found
+                        // the file rather than the one the first lookup happened to use.
+                        EpisodeNumber = lookup.EpisodeNumber,
+                    });
+                }
             }
 
-            foreach (var filtered in CandidateFilter.Filter(files, configuration.AllowArchives))
+            // The first identifier that produces anything is almost always the right one; the rest
+            // exist for when it is not. Stopping here keeps the ordinary case at one search.
+            if (candidates.Count > 0)
             {
-                candidates.Add(new SubtitleCandidate
-                {
-                    EntryId = entry.Id,
-                    EntryName = entry.Name,
-                    EntryNotes = entry.Notes,
-                    EntryUnverified = entry.Unverified,
-                    File = filtered.File,
-                    Rejection = filtered.Rejection,
-                    NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),
-                    Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
-                    ReleaseGroup = ReleaseInfo.Parse(filtered.File.Name).ReleaseGroup,
-                });
+                break;
             }
         }
 
@@ -288,7 +277,13 @@ public sealed class JimakuSyncService(
 
             if (CandidateFilter.IsReadableArchive(candidate.File.Name))
             {
-                var extracted = ArchiveExtractor.TryExtract(bytes, lookup.EpisodeNumber, out var innerName);
+                // The number that found the file, not the one Jellyfin shows. For a split cour the
+                // two differ, and picking a member out of a season archive by the wrong number
+                // yields a different episode's subtitle that looks entirely successful.
+                var extracted = ArchiveExtractor.TryExtract(
+                    bytes,
+                    candidate.EpisodeNumber ?? lookup.EpisodeNumber,
+                    out var innerName);
                 if (extracted is null)
                 {
                     logger.LogDebug("No usable subtitle inside the archive {File}.", candidate.File.Name);
@@ -771,6 +766,52 @@ public sealed class JimakuSyncService(
             Correlation = alignment.Correlation,
             PeakRatio = alignment.PeakRatio,
         };
+    }
+
+    /// <summary>
+    /// Lists the Jimaku entries for one lookup, reusing the cached list when it is still fresh.
+    /// </summary>
+    private async Task<IReadOnlyList<SeriesEntry>> GetEntriesAsync(
+        Episode episode,
+        AnimeLookup lookup,
+        PluginConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        // Every episode of a series resolves to the same entries, so searching once per episode
+        // spends a 25-per-minute budget re-asking a settled question. The key includes the lookup,
+        // so a split cour caches its two entry lists separately rather than overwriting each other.
+        var seriesId = episode.SeriesId;
+        var lookupKey = LookupKey(lookup);
+        var cached = profiles.GetEntries(seriesId, lookupKey, configuration.SeriesEntryCacheHours);
+
+        if (cached is not null)
+        {
+            logger.LogDebug(
+                "Reusing {Count} cached Jimaku entries for {Series}.",
+                cached.Count,
+                episode.SeriesName);
+
+            return cached;
+        }
+
+        var found = await SearchEntriesAsync(lookup, configuration.ApiKey, cancellationToken)
+            .ConfigureAwait(false);
+
+        var entries = found.Select(e => new SeriesEntry
+        {
+            Id = e.Id,
+            Name = e.Name,
+            Notes = e.Notes ?? string.Empty,
+            Unverified = e.Flags.Unverified,
+        }).ToList();
+
+        if (entries.Count > 0)
+        {
+            await profiles.RememberEntriesAsync(seriesId, lookupKey, entries, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return entries;
     }
 
     private async Task<IReadOnlyList<JimakuEntry>> SearchEntriesAsync(

@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 34
+version: 35
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,9 +16,12 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Make the episode list usable on a long-running show. Seasons are collapsed and summarised by
-    how many episodes still lack Japanese subtitles, rather than listing seventy episodes at once.
-  - Show an episode's result underneath the episode. The panels sat at the foot of the page, so
-    acting on something near the top sent its answer thousands of pixels away from the click.
-  - Reduce each episode to two buttons. The two diagnostics are for when something looks wrong and
-    now sit as quiet links instead of competing with the actions actually used.
+  - Find episodes in a season Jimaku holds as two entries. A split cour airs as two runs, AniList
+    gives each its own entry numbered from one, and Jellyfin shows the season numbered straight
+    through - so the later episodes live in the second entry under different numbers, and asking
+    the first for them found nothing at all.
+  - Stop an AniList ID recorded on the series from overriding that. It names one entry, so it is
+    right for the first cour and silently wrong for every episode after it; the mapping table,
+    which knows a season can be two entries, now leads and the series ID is kept as a fallback.
+  - Open season archives with the episode number that found the file rather than the one Jellyfin
+    shows. For a split cour they differ, and the wrong number extracts a different episode.
