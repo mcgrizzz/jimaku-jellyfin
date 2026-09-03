@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 35
+version: 36
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,12 +16,9 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Find episodes in a season Jimaku holds as two entries. A split cour airs as two runs, AniList
-    gives each its own entry numbered from one, and Jellyfin shows the season numbered straight
-    through - so the later episodes live in the second entry under different numbers, and asking
-    the first for them found nothing at all.
-  - Stop an AniList ID recorded on the series from overriding that. It names one entry, so it is
-    right for the first cour and silently wrong for every episode after it; the mapping table,
-    which knows a season can be two entries, now leads and the series ID is kept as a fallback.
-  - Open season archives with the episode number that found the file rather than the one Jellyfin
-    shows. For a split cour they differ, and the wrong number extracts a different episode.
+  - Stop rejecting correctly named files for using the season's numbering. Where Jimaku has already
+    filtered by episode it has answered that question with a relations table this plugin cannot
+    see - it knows a file called "14" and one called "Part 2 - E03" are the same episode, and
+    returns both. Checking them again against one number threw away six of seven correct files.
+  - Where the check is still needed, on a whole-entry listing the server did not filter, accept
+    either numbering: the entry's own and the library's.

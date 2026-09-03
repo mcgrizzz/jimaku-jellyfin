@@ -42,8 +42,23 @@ public static class ReleaseMatcher
     /// <param name="videoFileName">The local media file name.</param>
     /// <param name="subtitleFileName">The candidate subtitle file name.</param>
     /// <param name="expectedEpisode">The episode number expected, if known.</param>
+    /// <param name="alternateEpisode">
+    /// A second acceptable numbering for the same episode.
+    /// </param>
+    /// <remarks>
+    /// Two numbers, because one entry legitimately holds both. Where a season is split across two
+    /// AniList entries, Jimaku numbers the entry from one while the uploads inside it are named by
+    /// fansubbers who numbered the season straight through - so an entry for the second cour holds
+    /// files called "E03" and files called "14" describing the same episode, and Jimaku returns
+    /// both because its own relations table knows they are the same. Insisting on one of them
+    /// rejected every correctly named file in the entry.
+    /// </remarks>
     /// <returns>The match assessment.</returns>
-    public static NameMatch Compare(string videoFileName, string subtitleFileName, int? expectedEpisode)
+    public static NameMatch Compare(
+        string videoFileName,
+        string subtitleFileName,
+        int? expectedEpisode,
+        int? alternateEpisode = null)
     {
         var video = ReleaseInfo.Parse(videoFileName ?? string.Empty);
         var subtitle = ReleaseInfo.Parse(subtitleFileName ?? string.Empty);
@@ -56,12 +71,17 @@ public static class ReleaseMatcher
             return new NameMatch(100, true, false, false, true, "exact release match (CRC32)");
         }
 
-        var episodeMismatch = expectedEpisode.HasValue &&
-                              subtitle.EpisodeNumber.HasValue &&
-                              subtitle.EpisodeNumber.Value != expectedEpisode.Value;
+        var episodeMismatch = subtitle.EpisodeNumber.HasValue
+                              && (expectedEpisode.HasValue || alternateEpisode.HasValue)
+                              && subtitle.EpisodeNumber != expectedEpisode
+                              && subtitle.EpisodeNumber != alternateEpisode;
 
         if (episodeMismatch)
         {
+            var wanted = alternateEpisode.HasValue && alternateEpisode != expectedEpisode
+                ? string.Create(CultureInfo.InvariantCulture, $"{expectedEpisode} or {alternateEpisode}")
+                : expectedEpisode?.ToString(CultureInfo.InvariantCulture) ?? "none";
+
             return new NameMatch(
                 0,
                 false,
@@ -70,7 +90,7 @@ public static class ReleaseMatcher
                 false,
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"names episode {subtitle.EpisodeNumber}, expected {expectedEpisode}"));
+                    $"names episode {subtitle.EpisodeNumber}, expected {wanted}"));
         }
 
         var score = 0;

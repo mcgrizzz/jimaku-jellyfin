@@ -91,8 +91,11 @@ public sealed class JimakuSyncService(
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var files = await GetFilesAsync(entry.Id, lookup, configuration.ApiKey, cancellationToken)
-                    .ConfigureAwait(false);
+                var (files, filteredByServer) = await GetFilesAsync(
+                    entry.Id,
+                    lookup,
+                    configuration.ApiKey,
+                    cancellationToken).ConfigureAwait(false);
 
                 foreach (var filtered in CandidateFilter.Filter(files, configuration.AllowArchives))
                 {
@@ -109,7 +112,18 @@ public sealed class JimakuSyncService(
                         EntryUnverified = entry.Unverified,
                         File = filtered.File,
                         Rejection = filtered.Rejection,
-                        NameMatch = ReleaseMatcher.Compare(videoName, filtered.File.Name, lookup.EpisodeNumber),
+                        // When the server filtered by episode, it has already answered this
+                        // question with better information than the filename carries, so no
+                        // episode is passed and none is enforced. Only an unfiltered listing -
+                        // a whole entry at once - needs our own check, and there both numberings
+                        // are acceptable: the entry's own, and the one the library uses.
+                        NameMatch = filteredByServer
+                            ? ReleaseMatcher.Compare(videoName, filtered.File.Name, null)
+                            : ReleaseMatcher.Compare(
+                                videoName,
+                                filtered.File.Name,
+                                lookup.EpisodeNumber,
+                                episode.IndexNumber),
                         Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
                         ReleaseGroup = ReleaseInfo.Parse(filtered.File.Name).ReleaseGroup,
 
@@ -192,7 +206,8 @@ public sealed class JimakuSyncService(
                     NameMatch = ReleaseMatcher.Compare(
                         Path.GetFileName(episode.Path) ?? string.Empty,
                         options.ForcedFile.Name,
-                        lookup.EpisodeNumber),
+                        lookup.EpisodeNumber,
+                        episode.IndexNumber),
                     ReleaseGroup = ReleaseInfo.Parse(options.ForcedFile.Name).ReleaseGroup,
                 }
             ];
@@ -847,7 +862,17 @@ public sealed class JimakuSyncService(
         return Array.Empty<JimakuEntry>();
     }
 
-    private async Task<IReadOnlyList<JimakuFile>> GetFilesAsync(
+    /// <summary>
+    /// Lists an entry's files for one episode, saying whether the server did the filtering.
+    /// </summary>
+    /// <remarks>
+    /// Which matters, because Jimaku's filter is better than ours. It parses filenames with anitomy
+    /// and consults an anime-relations table keyed by the AniList ID, so it knows that a file
+    /// called "14" and a file called "Part 2 - E03" are the same episode and returns both. Our own
+    /// check knows only what the filename says, and applying it to a list the server has already
+    /// filtered rejects correct files for disagreeing with a numbering they never claimed to use.
+    /// </remarks>
+    private async Task<(IReadOnlyList<JimakuFile> Files, bool FilteredByServer)> GetFilesAsync(
         long entryId,
         AnimeLookup lookup,
         string apiKey,
@@ -857,15 +882,24 @@ public sealed class JimakuSyncService(
             .GetFilesAsync(entryId, lookup.EpisodeNumber, apiKey, cancellationToken)
             .ConfigureAwait(false);
 
-        if (files.Count > 0 || !lookup.EpisodeNumber.HasValue)
+        if (files.Count > 0)
         {
-            return files;
+            return (files, lookup.EpisodeNumber.HasValue);
+        }
+
+        if (!lookup.EpisodeNumber.HasValue)
+        {
+            return (files, false);
         }
 
         // Jimaku drops files whose episode number it cannot parse from the filename when the
-        // episode filter is set, which silently hides season packs. Ask again without the filter.
+        // episode filter is set, which silently hides season packs. Ask again without the filter -
+        // and this time our own episode check has to do the work the server's was doing.
         logger.LogDebug("No per-episode files in entry {EntryId}; retrying without the episode filter.", entryId);
-        return await apiClient.GetFilesAsync(entryId, null, apiKey, cancellationToken).ConfigureAwait(false);
+        var unfiltered = await apiClient.GetFilesAsync(entryId, null, apiKey, cancellationToken)
+            .ConfigureAwait(false);
+
+        return (unfiltered, false);
     }
 
     /// <summary>
