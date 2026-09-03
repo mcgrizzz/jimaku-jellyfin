@@ -75,9 +75,33 @@ public class JimakuSubtitleProvider(
         try
         {
             var candidates = await SyncService.FindCandidatesAsync(episode, cancellationToken).ConfigureAwait(false);
+            var usable = candidates.Where(c => c.IsUsable).ToList();
 
-            return candidates
-                .Where(c => c.IsUsable)
+            if (usable.Count == 0)
+            {
+                return [];
+            }
+
+            // First in the list, and the only entry most people should need. Core preserves the
+            // order a provider returns, so this stays at the top; picking it runs the same
+            // selection the plugin's own page runs, which measures every candidate against the
+            // episode rather than asking the user to guess from filenames.
+            var results = new List<RemoteSubtitleInfo>(usable.Count + 1)
+            {
+                new()
+                {
+                    Id = SubtitleId.EncodeAuto(request.MediaPath),
+                    Name = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Best match - checked against this episode ({usable.Count} candidates)"),
+                    ProviderName = Name,
+                    Format = "ass",
+                    ThreeLetterISOLanguageName = "jpn",
+                    Comment = "Downloads whichever of the files below actually lines up with your copy, correcting its timing if it needs it.",
+                },
+            };
+
+            results.AddRange(usable
                 .Select(c => new RemoteSubtitleInfo
                 {
                     Id = SubtitleId.Encode(c.EntryId, c.File.Name, c.File.Url, request.MediaPath),
@@ -92,8 +116,9 @@ public class JimakuSubtitleProvider(
                     // reaching the picker is human-authored.
                     AiTranslated = false,
                     MachineTranslated = false,
-                })
-                .ToList();
+                }));
+
+            return results;
         }
         catch (Exception ex)
         {
@@ -105,7 +130,7 @@ public class JimakuSubtitleProvider(
     /// <inheritdoc />
     public async Task<SubtitleResponse> GetSubtitles(string id, CancellationToken cancellationToken)
     {
-        var (entryId, fileName, url, itemPath) = SubtitleId.Decode(id);
+        var (entryId, fileName, url, itemPath, auto) = SubtitleId.Decode(id);
 
         if (libraryManager.FindByPath(itemPath, false) is not Episode episode)
         {
@@ -117,8 +142,11 @@ public class JimakuSubtitleProvider(
             new SyncOptions
             {
                 AllowPiecewise = true,
-                ForcedFile = new JimakuFile { Name = fileName, Url = url },
-                ForcedEntryId = entryId,
+
+                // The automatic entry forces nothing: leaving these unset is what makes the
+                // pipeline measure every candidate and rank them, rather than verifying one.
+                ForcedFile = auto ? null : new JimakuFile { Name = fileName, Url = url },
+                ForcedEntryId = auto ? 0 : entryId,
 
                 // Core's SubtitleManager saves whatever comes back and refreshes the item, so
                 // writing a sidecar here too would leave two copies of the same subtitle.
@@ -128,12 +156,15 @@ public class JimakuSubtitleProvider(
                 // tell them nothing. This is what lets the plugin speak for itself afterwards.
                 Interactive = true,
 
-                // A refusal here cannot be explained. The dialog reports a failed download with no
-                // reason, no numbers and no way to override, so declining is strictly less useful
-                // than writing the file the user named - with the measured correction if one was
-                // found. The plugin's own page remains the strict path.
-                ApplyEvenIfUnverified = Plugin.Instance?.Configuration.NativePickerAppliesUnverified ?? true,
-                UseMeasuredTransform = true,
+                // A refusal on a named file cannot be explained: the dialog reports a failed
+                // download with no reason, no numbers and no way to override, so writing what was
+                // asked for - with the measured correction if one was found - is more useful than
+                // declining. It applies only to a named file. On the automatic entry it would make
+                // every candidate acceptable and rank them on nothing, which is the opposite of
+                // what picking "best match" asks for; there, declining is the whole point.
+                ApplyEvenIfUnverified = !auto
+                    && (Plugin.Instance?.Configuration.NativePickerAppliesUnverified ?? true),
+                UseMeasuredTransform = !auto,
             },
             cancellationToken).ConfigureAwait(false);
 
@@ -181,19 +212,36 @@ internal static class SubtitleId
 
     public static string Encode(long entryId, string fileName, string url, string itemPath)
     {
-        var payload = JsonSerializer.SerializeToUtf8Bytes(new Payload(entryId, fileName, url, itemPath), Options);
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new Payload(entryId, fileName, url, itemPath, false),
+            Options);
+
         return Base64Url.EncodeToString(payload);
     }
 
-    public static (long EntryId, string FileName, string Url, string ItemPath) Decode(string id)
+    /// <summary>
+    /// Builds the identifier for the entry that stands for "choose for me".
+    /// </summary>
+    /// <param name="itemPath">The episode's media path, which is all that is needed.</param>
+    /// <returns>The identifier.</returns>
+    public static string EncodeAuto(string itemPath)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new Payload(0, string.Empty, string.Empty, itemPath, true),
+            Options);
+
+        return Base64Url.EncodeToString(payload);
+    }
+
+    public static (long EntryId, string FileName, string Url, string ItemPath, bool Auto) Decode(string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         var payload = JsonSerializer.Deserialize<Payload>(Base64Url.DecodeFromChars(id), Options)
             ?? throw new InvalidOperationException("The subtitle identifier could not be decoded.");
 
-        return (payload.EntryId, payload.FileName, payload.Url, payload.ItemPath);
+        return (payload.EntryId, payload.FileName, payload.Url, payload.ItemPath, payload.Auto);
     }
 
-    private sealed record Payload(long EntryId, string FileName, string Url, string ItemPath);
+    private sealed record Payload(long EntryId, string FileName, string Url, string ItemPath, bool Auto);
 }

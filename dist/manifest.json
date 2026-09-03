@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.36.0",
+                "changelog": "- Put \"Best match\" at the top of a client's own subtitle list. Downloading it runs the same\n  selection the plugin's page runs - measuring every candidate against the episode and correcting\n  the winner - instead of asking you to guess from filenames. Unlike a named file, it declines\n  when nothing convinces, which is the point of asking for the best one.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.36.0.zip",
+                "checksum": "976f9d9fce18ea99ec5d545844e20147",
+                "timestamp": "2026-09-03T15:18:05Z"
+            },
+            {
                 "version": "1.0.35.0",
                 "changelog": "- Stop rejecting correctly named files for using the season's numbering. Where Jimaku has already\n  filtered by episode it has answered that question with a relations table this plugin cannot\n  see - it knows a file called \"14\" and one called \"Part 2 - E03\" are the same episode, and\n  returns both. Checking them again against one number threw away six of seven correct files.\n- Where the check is still needed, on a whole-entry listing the server did not filter, accept\n  either numbering: the entry's own and the library's.",
                 "targetAbi": "10.11.0.0",
