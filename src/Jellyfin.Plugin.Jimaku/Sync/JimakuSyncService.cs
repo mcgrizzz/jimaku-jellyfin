@@ -1088,7 +1088,7 @@ public sealed class JimakuSyncService(
 
         return string.Create(
             CultureInfo.InvariantCulture,
-            $" This file is named episode {text} - a recap or side story that airs between two episodes - but the library has it as episode {indexed}, because the fraction is dropped when the name is read. Subtitles for episode {indexed} are a different episode and will never line up. Correcting the episode in the library is the fix; there is nothing this plugin can do about it.");
+            $" This file is named episode {text} - an OVA or side story, which airs outside the numbered run - but the library has it as episode {indexed}, because the fraction is dropped when the name is read. Subtitles for episode {indexed} belong to a different episode and will never line up, however they are corrected. The fix is in the library rather than here: Jellyfin files this kind of episode under Specials, so moving it to a Season 00 folder and naming it S00E01 gives it an identity of its own. Left as it is, it also shadows the real episode {indexed}.");
     }
 
     private static string BuildDeclineMessage(List<SubtitleCandidate> usable, ReferenceTrack? reference)

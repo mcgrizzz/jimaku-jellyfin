@@ -9,11 +9,12 @@ namespace Jellyfin.Plugin.Jimaku.Matching;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A recap or side story that airs between two episodes is numbered with a half - 23.5 sits between
-/// 23 and 24. Jellyfin's own parser reads the whole number and drops the fraction, so the file is
-/// filed as episode 23 and everything downstream asks for subtitles for episode 23. Those subtitles
-/// exist, download cleanly, and cannot possibly line up, because the episode on disk is not the one
-/// they belong to.
+/// An OVA or side story released outside the numbered run gets a half - 23.5 sits between 23 and
+/// 24, which is how trackers file something that belongs to no episode slot. Jellyfin's own parser
+/// reads the whole number and drops the fraction, so the file is filed as episode 23 and everything
+/// downstream asks for subtitles for episode 23. Those subtitles exist, download cleanly, and
+/// cannot possibly line up, because the episode on disk is not the one they belong to - and it is
+/// shadowing the real episode 23 into the bargain.
 /// </para>
 /// <para>
 /// Nothing else notices. Anitomy declines to parse the number at all and puts the whole string in

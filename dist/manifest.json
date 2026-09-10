@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.38.0",
+                "changelog": "- Say what to do about a file named 23.5. It is an OVA released outside the numbered run, filed\n  under episode 23 because the fraction is dropped when the name is read - so it fetches another\n  episode's subtitles and shadows the real episode 23. Jellyfin files these under Specials.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.38.0.zip",
+                "checksum": "66b2e398fa6796d754f9397a5d7268d8",
+                "timestamp": "2026-09-10T15:32:09Z"
+            },
+            {
                 "version": "1.0.37.0",
                 "changelog": "- Say when a file is a recap the library has filed under the wrong number. An episode named 23.5\n  airs between two episodes; Jellyfin reads the whole number and drops the fraction, so subtitles\n  for episode 23 are fetched for an episode that is not 23. They download cleanly and never line\n  up, and every measurement reports exactly what a wrong subtitle reports.\n- Ignore subtitle tracks far too dense to be speech. One file offered a reference of ten thousand\n  cues - seven a second - against which every candidate scored alike and the choice between them\n  was made on nothing.\n- Bound what \"apply it anyway\" is allowed to apply. Waiving verification says the evidence was\n  thin, not that any answer will do: a hundred seconds of shift with the runtime stretched one\n  and a half percent is the wrong episode, not a badly timed right one, and it was being written.",
                 "targetAbi": "10.11.0.0",

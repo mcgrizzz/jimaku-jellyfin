@@ -176,6 +176,17 @@ The plugin's own numbers can confirm the sidecar is right before you go looking:
 comparing to?" lists the reference cue times, and playing the episode with that subtitle track on
 shows whether they match.
 
+### An episode named 23.5 fetches subtitles that never line up
+
+An OVA or side story released outside the numbered run gets a half — 23.5 sits between 23 and 24,
+which is how trackers file something that belongs to no episode slot. Jellyfin's own parser reads
+the whole number and drops the fraction, so the file is filed as episode 23. Subtitles for episode
+23 are then fetched for an episode that is not 23: they download cleanly and cannot line up, and
+the file is shadowing the real episode 23 as well.
+
+The plugin says so when it declines, but the fix is in the library. Jellyfin files this kind of
+episode under Specials, so move it into a `Season 00` folder and name it `S00E01`.
+
 ## Prior art and credits
 
 - [`bpwhelan/Emby.Jimaku`](https://github.com/bpwhelan/Emby.Jimaku) — the Emby plugin that
