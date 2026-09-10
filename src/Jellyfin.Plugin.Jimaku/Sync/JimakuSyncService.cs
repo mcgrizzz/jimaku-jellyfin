@@ -574,6 +574,19 @@ public sealed class JimakuSyncService(
         CultureInfo.InvariantCulture,
         $"a={lookup.AniListId};t={lookup.TmdbId};q={lookup.Query}");
 
+    /// <summary>
+    /// Decides whether a correction is the right size to be a timing error at all.
+    /// </summary>
+    /// <remarks>
+    /// Separate from whether it is well evidenced. A file needing two seconds might be right or
+    /// wrong and only the measurement can say; a file needing a hundred is the wrong episode
+    /// however confidently it was measured, and the same is true of a runtime stretched by more
+    /// than a tenth.
+    /// </remarks>
+    private static bool IsSaneCorrection(TimingTransform transform, PluginConfiguration configuration) =>
+        Math.Abs(transform.OffsetSeconds) <= configuration.MaxOffsetSeconds
+        && Math.Abs(transform.Scale - 1.0) <= configuration.MaxScaleDeviation;
+
     private static AlignmentResult Evaluate(
         SubtitleCandidate candidate,
         SubtitleDocument document,
@@ -626,7 +639,15 @@ public sealed class JimakuSyncService(
             // Failing verification means the evidence was too thin to act on unattended, not that
             // the measurement was wrong. Writing a misaligned file unchanged is the worst of both
             // outcomes, so the correction is available to anyone willing to own the decision.
-            if (options.UseMeasuredTransform && !alignment.Transform.IsIdentity)
+            //
+            // Only within the same bounds the automatic path applies, though. Those two limits are
+            // not about confidence but about sense: a subtitle needing a hundred seconds of shift,
+            // or its runtime altered by more than a tenth, is not a badly timed right file. Taking
+            // such a measurement on trust because verification was waived writes something far
+            // worse than the file it came from.
+            if (options.UseMeasuredTransform
+                && !alignment.Transform.IsIdentity
+                && IsSaneCorrection(alignment.Transform, Configuration))
             {
                 alignment.Reason = string.Create(
                     CultureInfo.InvariantCulture,
@@ -638,9 +659,15 @@ public sealed class JimakuSyncService(
             }
             else
             {
+                var refused = options.UseMeasuredTransform && !alignment.Transform.IsIdentity
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Applied unchanged at your request: the measured correction ({alignment.Transform.Describe()}) is too large to be a timing error rather than the wrong file. ")
+                    : "Applied unchanged at your request, despite failing verification: ";
+
                 alignment.Verdict = SyncVerdict.Exact;
                 alignment.Transform = TimingTransform.Identity;
-                alignment.Reason = "Applied unchanged at your request, despite failing verification: " + alignment.Reason;
+                alignment.Reason = refused + alignment.Reason;
             }
         }
 
@@ -1034,7 +1061,34 @@ public sealed class JimakuSyncService(
         var report = referenceResolver.PeekReport(episode.Id);
         var explanation = report?.Explain() ?? string.Empty;
 
-        return explanation.Length > 0 ? " " + explanation : string.Empty;
+        return DescribeNumbering(episode) + (explanation.Length > 0 ? " " + explanation : string.Empty);
+    }
+
+    /// <summary>
+    /// Points out a file the library has filed under the wrong episode number.
+    /// </summary>
+    /// <remarks>
+    /// A recap airing between two episodes is numbered with a half. Jellyfin reads the whole number
+    /// and drops the fraction, so an episode 23.5 is filed as 23 and this fetches subtitles for
+    /// episode 23 - which exist, download cleanly and cannot line up, because the episode on disk
+    /// is not that one. Every measurement then reports what a wrong subtitle reports, and there is
+    /// nothing in the numbers to tell the two apart.
+    /// </remarks>
+    private static string DescribeNumbering(Episode episode)
+    {
+        if (!FractionalEpisode.TryParse(Path.GetFileName(episode.Path), out var whole, out var text))
+        {
+            return string.Empty;
+        }
+
+        if (episode.IndexNumber is not { } indexed || indexed != whole)
+        {
+            return string.Empty;
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $" This file is named episode {text} - a recap or side story that airs between two episodes - but the library has it as episode {indexed}, because the fraction is dropped when the name is read. Subtitles for episode {indexed} are a different episode and will never line up. Correcting the episode in the library is the fix; there is nothing this plugin can do about it.");
     }
 
     private static string BuildDeclineMessage(List<SubtitleCandidate> usable, ReferenceTrack? reference)

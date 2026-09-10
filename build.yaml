@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 37
+version: 38
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,7 +16,13 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Put "Best match" at the top of a client's own subtitle list. Downloading it runs the same
-    selection the plugin's page runs - measuring every candidate against the episode and correcting
-    the winner - instead of asking you to guess from filenames. Unlike a named file, it declines
-    when nothing convinces, which is the point of asking for the best one.
+  - Say when a file is a recap the library has filed under the wrong number. An episode named 23.5
+    airs between two episodes; Jellyfin reads the whole number and drops the fraction, so subtitles
+    for episode 23 are fetched for an episode that is not 23. They download cleanly and never line
+    up, and every measurement reports exactly what a wrong subtitle reports.
+  - Ignore subtitle tracks far too dense to be speech. One file offered a reference of ten thousand
+    cues - seven a second - against which every candidate scored alike and the choice between them
+    was made on nothing.
+  - Bound what "apply it anyway" is allowed to apply. Waiving verification says the evidence was
+    thin, not that any answer will do: a hundred seconds of shift with the runtime stretched one
+    and a half percent is the wrong episode, not a badly timed right one, and it was being written.

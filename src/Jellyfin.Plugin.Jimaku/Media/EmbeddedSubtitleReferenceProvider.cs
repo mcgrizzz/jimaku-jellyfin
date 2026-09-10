@@ -38,6 +38,18 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     private const int SparseTrackCues = 120;
 
     /// <summary>
+    /// Above this many cues a minute a track is not dialogue, whatever it claims to be.
+    /// </summary>
+    /// <remarks>
+    /// Speech runs somewhere between ten and thirty lines a minute; a track that also carries signs
+    /// and song lyrics might reach forty. Several times that means the file holds something else -
+    /// a subtitle carrying every language at once, per-syllable karaoke timing, or a track covering
+    /// far more than this episode. Whatever it is, it is not a map of when people speak, and
+    /// correlating against it returns an arbitrary answer with every candidate scoring alike.
+    /// </remarks>
+    private const double MaxCuesPerMinute = 90;
+
+    /// <summary>
     /// Cap on tracks compared. The vote is all-pairs, so cost grows with the square: ten tracks is
     /// forty-five cross-correlations, six is fifteen. Six is ample to out-vote an outlier.
     /// </summary>
@@ -156,6 +168,26 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 continue;
             }
 
+            var perMinute = CuesPerMinute(parsed, item);
+            if (perMinute > MaxCuesPerMinute)
+            {
+                logger.LogInformation(
+                    "Ignoring stream {Index} of {Path} as a timing reference: {Cues} cues is {Rate:0} a minute, far above speech.",
+                    candidate.Index,
+                    item.Path,
+                    parsed.Count,
+                    perMinute);
+
+                if (info is not null)
+                {
+                    info.Status = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{perMinute:0} cues a minute, far too dense to be speech");
+                }
+
+                continue;
+            }
+
             if (info is not null)
             {
                 info.Status = IsUsableText(candidate)
@@ -164,6 +196,12 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             }
 
             tracks.Add((candidate, parsed));
+        }
+
+        if (tracks.Count == 0 && report.Streams.Exists(st => st.Status.Contains("too dense", StringComparison.Ordinal)))
+        {
+            report.Note =
+                "Every readable subtitle track in this file has far more cues than speech accounts for, so none of them describes when people are talking. The comparison fell back to the audio.";
         }
 
         if (tracks.Count == 0)
@@ -378,6 +416,19 @@ public sealed class EmbeddedSubtitleReferenceProvider(
         }
 
         return samples;
+    }
+
+    /// <summary>
+    /// Cue rate against the episode's runtime, or against the track's own span when the runtime is
+    /// unknown.
+    /// </summary>
+    private static double CuesPerMinute(CueTrack track, BaseItem item)
+    {
+        var seconds = item.RunTimeTicks.HasValue
+            ? TimeSpan.FromTicks(item.RunTimeTicks.Value).TotalSeconds
+            : track.LastEndSeconds - track.FirstStartSeconds;
+
+        return seconds > 60 ? track.Count / (seconds / 60.0) : 0;
     }
 
     private static bool IsAnnotation(MediaStream stream)
