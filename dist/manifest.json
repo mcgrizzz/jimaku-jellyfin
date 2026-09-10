@@ -8,6 +8,14 @@
         "category": "Subtitles",
         "versions": [
             {
+                "version": "1.0.39.0",
+                "changelog": "- Search for an OVA or special by its own name instead of asking for that number of the season.\n  Jellyfin files these under season zero, where the first special is S00E01 and has nothing to do\n  with episode one - which is what was being requested, and why episode one's subtitles kept\n  coming back for an OVA.\n- Refuse a reference track that is on screen almost continuously. One release offered a track\n  covering every second of the episode; a signal that is always on overlaps every alignment\n  equally, so all seven candidates scored alike with uniqueness 1.00.\n- Collapse subtitle events written more than once. Multi-language scripts put each language on\n  its own line at the same timestamp, which doubled the cue count and halved every coverage\n  figure measured against it.",
+                "targetAbi": "10.11.0.0",
+                "sourceUrl": "https://mcgrizzz.github.io/jimaku-jellyfin/dist/jimaku_1.0.39.0.zip",
+                "checksum": "b8f5731f48bed5047a2ac34fbaeb7b08",
+                "timestamp": "2026-09-10T17:10:54Z"
+            },
+            {
                 "version": "1.0.38.0",
                 "changelog": "- Say what to do about a file named 23.5. It is an OVA released outside the numbered run, filed\n  under episode 23 because the fraction is dropped when the name is read - so it fetches another\n  episode's subtitles and shadows the real episode 23. Jellyfin files these under Specials.",
                 "targetAbi": "10.11.0.0",

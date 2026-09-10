@@ -91,6 +91,18 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
         var series = episode.Series;
         var episodeNumber = episode.IndexNumber;
         var seasonNumber = episode.ParentIndexNumber;
+
+        // Season zero is where Jellyfin files OVAs and specials, and its numbering is its own: the
+        // first special is S00E01 and has nothing to do with episode one of the season. Carrying
+        // that number into the main run asks for the wrong episode of the wrong entry and gets
+        // subtitles that download cleanly and cannot possibly fit. These have their own AniList
+        // entry - and their own Jimaku entry, named after the special - so a name search is the
+        // only route, and it must not carry an episode number.
+        if (seasonNumber == 0)
+        {
+            return [SpecialLookup(series, episode)];
+        }
+
         var lookups = new List<AnimeLookup>();
 
         // The mapping table leads, because it is the only source that knows a season can be two
@@ -155,6 +167,27 @@ public sealed class AnimeIdResolver(KometaMappingCache mappings, ILogger<AnimeId
                 lookups.Add(lookup);
             }
         }
+    }
+
+    /// <summary>
+    /// Builds the lookup for an OVA or special, which is searched by its own name.
+    /// </summary>
+    private static AnimeLookup SpecialLookup(Series? series, Episode episode)
+    {
+        var seriesName = series?.Name ?? episode.SeriesName ?? string.Empty;
+        var title = episode.Name ?? string.Empty;
+
+        // The special's own title is what distinguishes its entry from the season's. Jimaku names
+        // them accordingly - the Mushoku Tensei OVA sits under "... Part 2 - Eris no Goblin
+        // Toubatsu" rather than under any numbered season.
+        var query = string.IsNullOrWhiteSpace(title) ? seriesName : $"{seriesName} {title}";
+
+        return new AnimeLookup(
+            null,
+            null,
+            string.IsNullOrWhiteSpace(query) ? null : query,
+            null,
+            "special or OVA, searched by name (season 0 has its own numbering)");
     }
 
     private static AnimeLookup NameLookup(Series? series, Episode episode, int? seasonNumber, int? episodeNumber)

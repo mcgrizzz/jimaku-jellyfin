@@ -1,6 +1,6 @@
 name: "Jimaku"
 guid: "9f1c2a3e-6d54-4b07-8e21-5c9a7d3b1f80"
-version: 39
+version: 40
 targetAbi: "10.11.0.0"
 framework: "net9.0"
 owner: "andrew"
@@ -16,6 +16,13 @@ artifacts:
   - "Jellyfin.Plugin.Jimaku.dll"
   - "AnitomySharp.dll"
 changelog: |-
-  - Say what to do about a file named 23.5. It is an OVA released outside the numbered run, filed
-    under episode 23 because the fraction is dropped when the name is read - so it fetches another
-    episode's subtitles and shadows the real episode 23. Jellyfin files these under Specials.
+  - Search for an OVA or special by its own name instead of asking for that number of the season.
+    Jellyfin files these under season zero, where the first special is S00E01 and has nothing to do
+    with episode one - which is what was being requested, and why episode one's subtitles kept
+    coming back for an OVA.
+  - Refuse a reference track that is on screen almost continuously. One release offered a track
+    covering every second of the episode; a signal that is always on overlaps every alignment
+    equally, so all seven candidates scored alike with uniqueness 1.00.
+  - Collapse subtitle events written more than once. Multi-language scripts put each language on
+    its own line at the same timestamp, which doubled the cue count and halved every coverage
+    figure measured against it.

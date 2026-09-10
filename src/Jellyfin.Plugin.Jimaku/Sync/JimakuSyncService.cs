@@ -75,6 +75,11 @@ public sealed class JimakuSyncService(
         var candidates = new List<SubtitleCandidate>();
         var seen = new HashSet<(long Entry, string File)>();
 
+        // Season zero numbers its specials independently of the season, so the library's number is
+        // not a second name for the same episode there - accepting it would let a file called "01"
+        // pass as the first OVA.
+        var libraryEpisode = episode.ParentIndexNumber == 0 ? null : episode.IndexNumber;
+
         // Each lookup is a different way the episode might be numbered, and a split cour needs two:
         // one season, two AniList entries, each numbered from one. The entry that does not contain
         // the episode returns nothing, so trying both costs a request and cannot mislead.
@@ -123,7 +128,7 @@ public sealed class JimakuSyncService(
                                 videoName,
                                 filtered.File.Name,
                                 lookup.EpisodeNumber,
-                                episode.IndexNumber),
+                                libraryEpisode),
                         Languages = SubtitleLanguageHint.Classify(filtered.File.Name),
                         ReleaseGroup = ReleaseInfo.Parse(filtered.File.Name).ReleaseGroup,
 

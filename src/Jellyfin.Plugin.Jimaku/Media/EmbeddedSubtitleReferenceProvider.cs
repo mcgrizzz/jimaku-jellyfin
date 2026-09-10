@@ -50,6 +50,18 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     private const double MaxCuesPerMinute = 90;
 
     /// <summary>
+    /// Share of the episode a reference may have something on screen before it is useless.
+    /// </summary>
+    /// <remarks>
+    /// A reference works by marking when people are speaking and, just as importantly, when they
+    /// are not. One that is on almost all the time marks nothing: every alignment overlaps it about
+    /// equally, so every candidate scores alike and whichever wins does so on rounding. Dialogue
+    /// typically occupies half an episode or less; a track occupying nearly all of it is not
+    /// describing speech.
+    /// </remarks>
+    private const double MaxDutyCycle = 0.85;
+
+    /// <summary>
     /// Cap on tracks compared. The vote is all-pairs, so cost grows with the square: ten tracks is
     /// forty-five cross-correlations, six is fifteen. Six is ample to out-vote an outlier.
     /// </summary>
@@ -168,6 +180,30 @@ public sealed class EmbeddedSubtitleReferenceProvider(
                 continue;
             }
 
+            // Duplicate events are ordinary in multi-language scripts, where each language is its
+            // own line at the same timestamp. They inflate the cue count and distort coverage,
+            // which is measured per reference cue.
+            parsed = Deduplicate(parsed);
+
+            var duty = DutyCycle(parsed, item);
+            if (duty > MaxDutyCycle)
+            {
+                logger.LogInformation(
+                    "Ignoring stream {Index} of {Path} as a timing reference: it is on screen {Duty:P0} of the time, which marks nothing.",
+                    candidate.Index,
+                    item.Path,
+                    duty);
+
+                if (info is not null)
+                {
+                    info.Status = string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"on screen {duty:P0} of the episode, so it marks nothing to align to");
+                }
+
+                continue;
+            }
+
             var perMinute = CuesPerMinute(parsed, item);
             if (perMinute > MaxCuesPerMinute)
             {
@@ -198,10 +234,12 @@ public sealed class EmbeddedSubtitleReferenceProvider(
             tracks.Add((candidate, parsed));
         }
 
-        if (tracks.Count == 0 && report.Streams.Exists(st => st.Status.Contains("too dense", StringComparison.Ordinal)))
+        if (tracks.Count == 0
+            && report.Streams.Exists(st => st.Status.Contains("too dense", StringComparison.Ordinal)
+                                        || st.Status.Contains("marks nothing", StringComparison.Ordinal)))
         {
             report.Note =
-                "Every readable subtitle track in this file has far more cues than speech accounts for, so none of them describes when people are talking. The comparison fell back to the audio.";
+                "None of this file's subtitle tracks describes when people are speaking - they are either far denser than speech or on screen almost continuously - so none of them can be used to check timing. The comparison fell back to the audio.";
         }
 
         if (tracks.Count == 0)
@@ -422,6 +460,63 @@ public sealed class EmbeddedSubtitleReferenceProvider(
     /// Cue rate against the episode's runtime, or against the track's own span when the runtime is
     /// unknown.
     /// </summary>
+    /// <summary>
+    /// Collapses events sharing a start and end, which are one moment written more than once.
+    /// </summary>
+    private static CueTrack Deduplicate(CueTrack track)
+    {
+        var seen = new HashSet<(long Start, long End)>();
+        var kept = new List<Cue>(track.Count);
+
+        foreach (var cue in track.Cues)
+        {
+            // Rounded to the bin the signal is built at, so timestamps differing by less than the
+            // resolution anything is measured at are treated as the same moment.
+            var key = ((long)Math.Round(cue.StartSeconds * 100), (long)Math.Round(cue.EndSeconds * 100));
+            if (seen.Add(key))
+            {
+                kept.Add(cue);
+            }
+        }
+
+        return kept.Count == track.Count ? track : new CueTrack(kept);
+    }
+
+    /// <summary>Share of the episode the track has something on screen.</summary>
+    private static double DutyCycle(CueTrack track, BaseItem item)
+    {
+        if (track.Count == 0)
+        {
+            return 0;
+        }
+
+        var seconds = item.RunTimeTicks.HasValue
+            ? TimeSpan.FromTicks(item.RunTimeTicks.Value).TotalSeconds
+            : track.LastEndSeconds - track.FirstStartSeconds;
+
+        if (seconds <= 60)
+        {
+            return 0;
+        }
+
+        // Union rather than sum: overlapping events cover the same moment once, and a script that
+        // writes every line twice would otherwise read as twice as busy as it is.
+        var covered = 0.0;
+        var openUntil = double.NegativeInfinity;
+
+        foreach (var cue in track.Cues.OrderBy(c => c.StartSeconds))
+        {
+            var start = Math.Max(cue.StartSeconds, openUntil);
+            if (cue.EndSeconds > start)
+            {
+                covered += cue.EndSeconds - start;
+                openUntil = cue.EndSeconds;
+            }
+        }
+
+        return Math.Min(1.0, covered / seconds);
+    }
+
     private static double CuesPerMinute(CueTrack track, BaseItem item)
     {
         var seconds = item.RunTimeTicks.HasValue
